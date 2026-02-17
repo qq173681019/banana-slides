@@ -120,6 +120,53 @@ def _reconstruct_outline_from_pages(pages: list) -> list:
     return outline
 
 
+def _smart_merge_pages(project_id, pages_data):
+    """Smart merge: match new pages to existing by title, update in place to preserve images/descriptions."""
+    old_pages = Page.query.filter_by(project_id=project_id).order_by(Page.order_index).all()
+
+    old_by_title = {}
+    for p in old_pages:
+        outline = p.get_outline_content()
+        if outline and outline.get('title') and outline['title'] not in old_by_title:
+            old_by_title[outline['title']] = p
+
+    matched_ids = set()
+    pages_list = []
+
+    for i, page_data in enumerate(pages_data):
+        title = page_data.get('title')
+        old_page = old_by_title.get(title) if title else None
+
+        if old_page and old_page.id not in matched_ids:
+            matched_ids.add(old_page.id)
+            old_page.order_index = i
+            old_page.part = page_data.get('part')
+            old_page.set_outline_content({
+                'title': title,
+                'points': page_data.get('points', [])
+            })
+            pages_list.append(old_page)
+        else:
+            page = Page(
+                project_id=project_id,
+                order_index=i,
+                part=page_data.get('part'),
+                status='DRAFT'
+            )
+            page.set_outline_content({
+                'title': title,
+                'points': page_data.get('points', [])
+            })
+            db.session.add(page)
+            pages_list.append(page)
+
+    for p in old_pages:
+        if p.id not in matched_ids:
+            db.session.delete(p)
+
+    return pages_list
+
+
 @project_bp.route('', methods=['GET'])
 def list_projects():
     """
@@ -434,34 +481,15 @@ def generate_outline(project_id):
             project_context = ProjectContext(project, reference_files_content)
             outline = ai_service.generate_outline(project_context, language=language)
         
-        # Flatten outline to pages
+        # Flatten outline to pages and smart merge with existing
         pages_data = ai_service.flatten_outline(outline)
-        
-        # Delete existing pages (using ORM session to trigger cascades)
-        # Note: Cannot use bulk delete as it bypasses ORM cascades for PageImageVersion
-        old_pages = Page.query.filter_by(project_id=project_id).all()
-        for old_page in old_pages:
-            db.session.delete(old_page)
-        
-        # Create pages from outline
-        pages_list = []
-        for i, page_data in enumerate(pages_data):
-            page = Page(
-                project_id=project_id,
-                order_index=i,
-                part=page_data.get('part'),
-                status='DRAFT'
-            )
-            page.set_outline_content({
-                'title': page_data.get('title'),
-                'points': page_data.get('points', [])
-            })
-            
-            db.session.add(page)
-            pages_list.append(page)
-        
-        # Update project status
-        project.status = 'OUTLINE_GENERATED'
+        pages_list = _smart_merge_pages(project_id, pages_data)
+
+        # Update project status (don't downgrade if all pages already have content)
+        if all(p.description_content for p in pages_list) and pages_list:
+            project.status = 'DESCRIPTIONS_GENERATED'
+        else:
+            project.status = 'OUTLINE_GENERATED'
         project.updated_at = datetime.utcnow()
         
         db.session.commit()
@@ -885,73 +913,16 @@ def refine_outline(project_id):
             language=language
         )
         
-        # Flatten outline to pages
+        # Flatten outline to pages and smart merge with existing
         pages_data = ai_service.flatten_outline(refined_outline)
-        
-        # 在删除旧页面之前，先保存已有的页面描述（按标题匹配）
-        old_pages = Page.query.filter_by(project_id=project_id).order_by(Page.order_index).all()
-        descriptions_map = {}  # {title: description_content}
-        old_status_map = {}  # {title: status} 用于保留状态
-        
-        for old_page in old_pages:
-            old_outline = old_page.get_outline_content()
-            if old_outline and old_outline.get('title'):
-                title = old_outline.get('title')
-                if old_page.description_content:
-                    descriptions_map[title] = old_page.description_content
-                # 如果旧页面已经有描述，保留状态
-                if old_page.status in ['DESCRIPTION_GENERATED', 'IMAGE_GENERATED']:
-                    old_status_map[title] = old_page.status
-        
-        # Delete existing pages (using ORM session to trigger cascades)
-        for old_page in old_pages:
-            db.session.delete(old_page)
-        
-        # Create pages from refined outline
-        pages_list = []
-        has_descriptions = False
-        preserved_count = 0
-        new_count = 0
-        
-        for i, page_data in enumerate(pages_data):
-            page = Page(
-                project_id=project_id,
-                order_index=i,
-                part=page_data.get('part'),
-                status='DRAFT'
-            )
-            page.set_outline_content({
-                'title': page_data.get('title'),
-                'points': page_data.get('points', [])
-            })
-            
-            # 尝试匹配并恢复已有的描述
-            title = page_data.get('title')
-            if title in descriptions_map:
-                # 恢复描述内容
-                page.description_content = descriptions_map[title]
-                # 恢复状态（如果有）
-                if title in old_status_map:
-                    page.status = old_status_map[title]
-                else:
-                    page.status = 'DESCRIPTION_GENERATED'
-                has_descriptions = True
-                preserved_count += 1
-            else:
-                # 新页面或标题改变的页面，描述为空
-                # 这包括：新增的页面、合并的页面、标题改变的页面
-                page.status = 'DRAFT'
-                new_count += 1
-            
-            db.session.add(page)
-            pages_list.append(page)
-        
+        pages_list = _smart_merge_pages(project_id, pages_data)
+
+        preserved_count = sum(1 for p in pages_list if p.description_content)
+        new_count = len(pages_list) - preserved_count
         logger.info(f"描述匹配完成: 保留了 {preserved_count} 个页面的描述, {new_count} 个页面需要重新生成描述")
-        
+
         # Update project status
-        # 如果所有页面都有描述，保持 DESCRIPTION_GENERATED 状态
-        # 否则降级为 OUTLINE_GENERATED
-        if has_descriptions and all(p.description_content for p in pages_list):
+        if preserved_count and all(p.description_content for p in pages_list):
             project.status = 'DESCRIPTIONS_GENERATED'
         else:
             project.status = 'OUTLINE_GENERATED'
