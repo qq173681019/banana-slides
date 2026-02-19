@@ -9,6 +9,7 @@ import logging
 from typing import Type, Optional
 from google import genai
 from google.genai import types
+from PIL import Image
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 from .base import TextProvider, strip_think_tags
@@ -107,8 +108,6 @@ class GenAITextProvider(TextProvider):
         Returns:
             Generated text
         """
-        from PIL import Image
-        
         # 加载图片
         img = Image.open(image_path)
         
@@ -166,7 +165,6 @@ class GenAITextProvider(TextProvider):
                                  schema: Type[BaseModel],
                                  thinking_budget: int = 0) -> Optional[BaseModel]:
         """Generate structured JSON with image input."""
-        from PIL import Image
         img = Image.open(image_path)
         config = self._build_json_config(schema, thinking_budget)
         response = self.client.models.generate_content(

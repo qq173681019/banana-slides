@@ -4,7 +4,7 @@ Pydantic models for structured JSON output from AI providers.
 Used with Gemini's response_schema to get guaranteed valid JSON.
 """
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 # --- Outline schemas ---

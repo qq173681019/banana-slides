@@ -328,12 +328,12 @@ class AIService:
             return None
     
     @staticmethod
-    def _extract_outline(resp: 'OutlineResponse') -> List[Dict]:
+    def _extract_outline(resp: OutlineResponse) -> List[Dict]:
         """Convert OutlineResponse to the list-of-dicts format used downstream."""
         return [item.model_dump(exclude_none=True) for item in resp.items]
 
     @staticmethod
-    def _extract_descriptions(resp: 'PageDescriptionsResponse') -> List[str]:
+    def _extract_descriptions(resp: PageDescriptionsResponse) -> List[str]:
         return resp.descriptions
 
     def generate_outline(self, project_context: ProjectContext, language: str = None) -> List[Dict]:

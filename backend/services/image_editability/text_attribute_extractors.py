@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Dict, Any, List, Optional, Tuple, Union
 from PIL import Image
 from services.prompts import get_text_attribute_extraction_prompt
+from services.ai_schemas import TextAttributeResponse, BatchTextAttributeResponse
 
 logger = logging.getLogger(__name__)
 
@@ -315,7 +316,6 @@ class CaptionModelTextAttributeExtractor(TextAttributeExtractor):
         
         try:
             # 使用 ai_service.generate_json_with_image（优先结构化输出，回退到重试）
-            from services.ai_schemas import TextAttributeResponse
             result = self.ai_service.generate_json_with_image(
                 prompt=prompt,
                 image_path=tmp_path,
@@ -491,7 +491,6 @@ class CaptionModelTextAttributeExtractor(TextAttributeExtractor):
             
             # 调用 ai_service.generate_json_with_image（优先结构化输出，回退到重试）
             try:
-                from services.ai_schemas import BatchTextAttributeResponse
                 result = self.ai_service.generate_json_with_image(
                     prompt=prompt,
                     image_path=tmp_path,
