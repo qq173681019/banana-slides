@@ -14,7 +14,7 @@ export const getProjectTitle = (project: Project): string => {
     const firstPage = sortedPages[0];
 
     if (firstPage?.outline_content?.title) {
-      return firstPage.outline_content.title;
+      return firstPage.outline_content!.title;
     }
   }
 
