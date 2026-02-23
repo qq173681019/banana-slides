@@ -184,7 +184,12 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
               {sections.map((section, i) => {
                 const style = SECTION_STYLES[section.key];
                 if (!style) {
-                  return <div key={i} className="text-sm text-gray-700 dark:text-foreground-secondary"><Markdown>{section.content}</Markdown></div>;
+                  return (
+                    <div key={i} className="rounded-lg px-3 py-2 bg-gray-50/80 dark:bg-gray-800/10">
+                      {section.key && <span className="text-[11px] font-medium text-gray-500/70 dark:text-gray-400/60 mb-1 block">{section.key}</span>}
+                      <div className="text-sm text-gray-700 dark:text-foreground-secondary"><Markdown>{section.content}</Markdown></div>
+                    </div>
+                  );
                 }
                 const isLayout = section.key === '排版建议';
                 return (
@@ -334,11 +339,20 @@ function LayoutDropdown({ presets, current, onSelect, onAdd }: {
         onClick={() => setOpen(!open)}
         className="flex items-center gap-0.5 text-[11px] text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 transition-colors"
       >
-        {current || '选择排版'}
+        选择排版
         <ChevronDown size={12} />
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] bg-white dark:bg-background-secondary border border-gray-200 dark:border-border-primary rounded-lg shadow-lg py-1">
+          {current && !presets.includes(current) && (
+            <button
+              key="__current__"
+              onClick={() => setOpen(false)}
+              className="w-full text-left px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400 font-medium bg-amber-50/50 dark:bg-amber-900/10"
+            >
+              当前生成
+            </button>
+          )}
           {presets.map(p => (
             <button
               key={p}

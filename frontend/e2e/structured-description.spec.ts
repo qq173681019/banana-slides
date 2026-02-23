@@ -73,10 +73,10 @@ test.describe('Structured description blocks (mock)', () => {
   })
 
   test('layout dropdown shows presets and selects one', async ({ page }) => {
-    let updatedSettings: any = null
+    let _updatedSettings: any = null
     await page.route('**/api/settings', async (route) => {
       if (route.request().method() === 'PUT') {
-        updatedSettings = JSON.parse(route.request().postData() || '{}')
+        _updatedSettings = JSON.parse(route.request().postData() || '{}')
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: {} }) })
         return
       }
@@ -92,8 +92,8 @@ test.describe('Structured description blocks (mock)', () => {
     await page.goto(`${baseUrl}/project/${PROJECT_ID}/detail`)
     await expect(page.locator('text=第 1 页')).toBeVisible({ timeout: 10000 })
 
-    // Click the layout dropdown trigger (shows current value "左图右文")
-    const dropdownTrigger = page.locator('button:has-text("左图右文")').first()
+    // Click the layout dropdown trigger (shows "选择排版")
+    const dropdownTrigger = page.locator('button:has-text("选择排版")').first()
     await dropdownTrigger.click()
 
     // Dropdown should show preset options

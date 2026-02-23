@@ -11,11 +11,14 @@ export interface DescriptionSection {
   content: string;
 }
 
-// 匹配段落标记开头，如 "页面标题：xxx" 或 "其他页面素材（...）"
+// 匹配已知段落标记，如 "页面标题：xxx" 或 "其他页面素材（...）"
 const SECTION_RE = new RegExp(
-  `^(${SECTION_KEYS.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})[：:（(]?`,
+  `^(${SECTION_KEYS.map(k => k.replace(/[.*+?^$()|[\]\\]/g, '\\$&')).join('|')})[：:（(]?`,
   'm',
 );
+
+// 匹配通用段落标记：2-8个中文字符后跟冒号，如 "演讲备注：xxx"
+const GENERIC_SECTION_RE = /^([\u4e00-\u9fff]{2,8})[：:]/;
 
 /** 将描述纯文本按段落标记拆分为结构化数组 */
 export function parseDescription(text: string): DescriptionSection[] {
@@ -34,16 +37,14 @@ export function parseDescription(text: string): DescriptionSection[] {
   };
 
   for (const line of lines) {
-    const match = line.match(SECTION_RE);
+    const match = line.match(SECTION_RE) || line.match(GENERIC_SECTION_RE);
     if (match) {
       flush();
       currentKey = match[1];
-      // 提取标记后的内容（去掉 "页面标题：" 中的冒号）
       const afterMarker = line.slice(match[0].length).trim();
       if (afterMarker) currentLines.push(afterMarker);
     } else {
       if (currentKey === null) {
-        // 标记前的内容归入一个无标记段落
         currentKey = '';
         currentLines.push(line);
       } else {
