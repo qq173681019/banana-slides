@@ -245,14 +245,19 @@ const debouncedUpdatePage = debounce(
         // Resume polling for active image generation tasks (e.g. after page refresh)
         const activeTasks = response.data.active_image_tasks as Array<{ task_id: string; page_ids: string[] }> | undefined;
         if (activeTasks?.length) {
-          const { pageGeneratingTasks } = get();
+          const newPageTasks = { ...get().pageGeneratingTasks };
+          const tasksToPoll: Record<string, string[]> = {};
           for (const t of activeTasks) {
-            const newPageIds = t.page_ids.filter(id => !pageGeneratingTasks[id]);
+            const newPageIds = t.page_ids.filter(id => !newPageTasks[id]);
             if (newPageIds.length) {
-              const updated = { ...get().pageGeneratingTasks };
-              newPageIds.forEach(id => { updated[id] = t.task_id; });
-              set({ pageGeneratingTasks: updated });
-              get().pollImageTask(t.task_id, newPageIds);
+              tasksToPoll[t.task_id] = newPageIds;
+              newPageIds.forEach(id => { newPageTasks[id] = t.task_id; });
+            }
+          }
+          if (Object.keys(tasksToPoll).length) {
+            set({ pageGeneratingTasks: newPageTasks });
+            for (const taskId in tasksToPoll) {
+              get().pollImageTask(taskId, tasksToPoll[taskId]);
             }
           }
         }
