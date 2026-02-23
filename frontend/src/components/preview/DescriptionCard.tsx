@@ -123,7 +123,12 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
     setIsEditing(false);
   };
 
-  // 排版下拉选择
+  // 排版下拉选择：记住初始AI生成的排版值
+  const layoutSection = useMemo(() => sections.find(s => s.key === '排版建议'), [sections]);
+  const originalLayoutRef = useRef(layoutSection?.content || '');
+  if (originalLayoutRef.current === '' && layoutSection?.content) {
+    originalLayoutRef.current = layoutSection.content;
+  }
   const [showAddPreset, setShowAddPreset] = useState(false);
   const [newPreset, setNewPreset] = useState('');
 
@@ -144,7 +149,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
 
   return (
     <>
-      <Card className="p-0 overflow-hidden flex flex-col">
+      <Card className="p-0 overflow-visible flex flex-col">
         {/* 标题栏 */}
         <div className="bg-banana-50 dark:bg-background-hover px-4 py-3 border-b border-gray-100 dark:border-border-primary">
           <div className="flex items-center justify-between">
@@ -200,6 +205,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
                         <LayoutDropdown
                           presets={layoutPresets}
                           current={section.content}
+                          originalValue={originalLayoutRef.current}
                           onSelect={handleLayoutSelect}
                           onAdd={() => setShowAddPreset(true)}
                         />
@@ -286,7 +292,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
             onChange={e => setNewPreset(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleAddPreset()}
             placeholder={t('descriptionCard.customPreset')}
-            className="w-full px-3 py-2 border border-gray-200 dark:border-border-primary rounded-lg bg-white dark:bg-background-secondary text-sm focus:outline-none focus:ring-2 focus:ring-banana/50"
+            className="w-full px-3 py-2 border border-gray-200 dark:border-border-primary rounded-lg bg-white dark:bg-background-secondary text-sm focus:outline-none focus:border-banana"
             autoFocus
           />
           <div className="flex justify-end gap-3">
@@ -314,9 +320,10 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
 );
 
 /** 排版预设下拉框 */
-function LayoutDropdown({ presets, current, onSelect, onAdd }: {
+function LayoutDropdown({ presets, current, originalValue, onSelect, onAdd }: {
   presets: string[];
   current: string;
+  originalValue: string;
   onSelect: (v: string) => void;
   onAdd: () => void;
 }) {
@@ -343,12 +350,14 @@ function LayoutDropdown({ presets, current, onSelect, onAdd }: {
         <ChevronDown size={12} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] bg-white dark:bg-background-secondary border border-gray-200 dark:border-border-primary rounded-lg shadow-lg py-1">
-          {current && !presets.includes(current) && (
+        <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] max-h-[200px] overflow-y-auto bg-white dark:bg-background-secondary border border-gray-200 dark:border-border-primary rounded-lg shadow-lg py-1">
+          {originalValue && !presets.includes(originalValue) && (
             <button
               key="__current__"
-              onClick={() => setOpen(false)}
-              className="w-full text-left px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400 font-medium bg-amber-50/50 dark:bg-amber-900/10"
+              onClick={() => { onSelect(originalValue); setOpen(false); }}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-banana-50 dark:hover:bg-banana-pale transition-colors ${
+                current === originalValue ? 'text-amber-700 dark:text-amber-400 font-medium bg-amber-50/50 dark:bg-amber-900/10' : 'text-gray-700 dark:text-foreground-secondary'
+              }`}
             >
               当前生成
             </button>
