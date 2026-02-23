@@ -103,6 +103,12 @@ export const DetailEditor: React.FC = () => {
     try { await updateSettings({ layout_presets: updated }); } catch { /* ignore */ }
   }, [layoutPresets]);
 
+  const handleDeleteLayoutPreset = useCallback(async (preset: string) => {
+    const updated = layoutPresets.filter(p => p !== preset);
+    setLayoutPresets(updated);
+    try { await updateSettings({ layout_presets: updated }); } catch { /* ignore */ }
+  }, [layoutPresets]);
+
   // PPT 翻新：异步任务轮询
   useEffect(() => {
     if (!projectId) return;
@@ -546,6 +552,7 @@ export const DetailEditor: React.FC = () => {
                     isAiRefining={isAiRefining}
                     layoutPresets={layoutPresets}
                     onAddLayoutPreset={handleAddLayoutPreset}
+                    onDeleteLayoutPreset={handleDeleteLayoutPreset}
                   />
                 );
               })

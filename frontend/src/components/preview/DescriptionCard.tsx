@@ -21,6 +21,13 @@ const descriptionCardI18n = {
       coverPageTooltip: "第一页为封面页，默认保持简洁风格",
       addPreset: "添加预设",
       customPreset: "自定义预设名称",
+      selectLayout: "选择排版",
+      currentGenerated: "当前生成",
+      sectionTitle: "标题",
+      sectionText: "正文",
+      sectionImage: "配图",
+      sectionLayout: "排版",
+      sectionMaterial: "素材",
     }
   },
   en: {
@@ -34,17 +41,24 @@ const descriptionCardI18n = {
       coverPageTooltip: "This is the cover page, default to keep simple style",
       addPreset: "Add preset",
       customPreset: "Custom preset name",
+      selectLayout: "Select layout",
+      currentGenerated: "Current generated",
+      sectionTitle: "Title",
+      sectionText: "Text",
+      sectionImage: "Image",
+      sectionLayout: "Layout",
+      sectionMaterial: "Material",
     }
   }
 };
 
 // 每个段落的样式配置（黄色系品牌色）
-const SECTION_STYLES: Record<string, { bg: string; label: string }> = {
-  '页面标题': { bg: 'bg-amber-50/80 dark:bg-amber-900/10', label: '标题' },
-  '页面文字': { bg: 'bg-yellow-50/80 dark:bg-yellow-900/10', label: '正文' },
-  '配图建议': { bg: 'bg-orange-50/80 dark:bg-orange-900/10', label: '配图' },
-  '排版建议': { bg: 'bg-amber-100/60 dark:bg-amber-800/10', label: '排版' },
-  '其他页面素材': { bg: 'bg-stone-50/80 dark:bg-stone-800/10', label: '素材' },
+const SECTION_STYLES: Record<string, { bg: string; labelKey: string }> = {
+  '页面标题': { bg: 'bg-amber-50/80 dark:bg-amber-900/10', labelKey: 'descriptionCard.sectionTitle' },
+  '页面文字': { bg: 'bg-yellow-50/80 dark:bg-yellow-900/10', labelKey: 'descriptionCard.sectionText' },
+  '配图建议': { bg: 'bg-orange-50/80 dark:bg-orange-900/10', labelKey: 'descriptionCard.sectionImage' },
+  '排版建议': { bg: 'bg-amber-100/60 dark:bg-amber-800/10', labelKey: 'descriptionCard.sectionLayout' },
+  '其他页面素材': { bg: 'bg-stone-50/80 dark:bg-stone-800/10', labelKey: 'descriptionCard.sectionMaterial' },
 };
 
 export interface DescriptionCardProps {
@@ -58,6 +72,7 @@ export interface DescriptionCardProps {
   isAiRefining?: boolean;
   layoutPresets?: string[];
   onAddLayoutPreset?: (preset: string) => void;
+  onDeleteLayoutPreset?: (preset: string) => void;
 }
 
 // 从 description_content 提取文本内容（提取到组件外部供 memo 比较器使用）
@@ -82,6 +97,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
   isAiRefining = false,
   layoutPresets,
   onAddLayoutPreset,
+  onDeleteLayoutPreset,
 }) => {
   const t = useT(descriptionCardI18n);
 
@@ -200,7 +216,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
                 return (
                   <div key={i} className={`rounded-lg px-3 py-2 ${style.bg}`}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px] font-medium text-amber-700/70 dark:text-amber-400/60">{style.label}</span>
+                      <span className="text-[11px] font-medium text-amber-700/70 dark:text-amber-400/60">{t(style.labelKey)}</span>
                       {isLayout && layoutPresets && (
                         <LayoutDropdown
                           presets={layoutPresets}
@@ -208,6 +224,8 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
                           originalValue={originalLayoutRef.current}
                           onSelect={handleLayoutSelect}
                           onAdd={() => setShowAddPreset(true)}
+                          onDelete={onDeleteLayoutPreset || (() => {})}
+                          t={t}
                         />
                       )}
                     </div>
@@ -320,17 +338,18 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
 );
 
 /** 排版预设下拉框 */
-function LayoutDropdown({ presets, current, originalValue, onSelect, onAdd }: {
+function LayoutDropdown({ presets, current, originalValue, onSelect, onAdd, onDelete, t }: {
   presets: string[];
   current: string;
   originalValue: string;
   onSelect: (v: string) => void;
   onAdd: () => void;
+  onDelete: (v: string) => void;
+  t: (key: string) => string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // 点击外部关闭
   React.useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -346,32 +365,42 @@ function LayoutDropdown({ presets, current, originalValue, onSelect, onAdd }: {
         onClick={() => setOpen(!open)}
         className="flex items-center gap-0.5 text-[11px] text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 transition-colors"
       >
-        选择排版
+        {t('descriptionCard.selectLayout')}
         <ChevronDown size={12} />
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] max-h-[200px] overflow-y-auto bg-white dark:bg-background-secondary border border-gray-200 dark:border-border-primary rounded-lg shadow-lg py-1">
           {originalValue && !presets.includes(originalValue) && (
             <button
-              key="__current__"
               onClick={() => { onSelect(originalValue); setOpen(false); }}
               className={`w-full text-left px-3 py-1.5 text-xs hover:bg-banana-50 dark:hover:bg-banana-pale transition-colors ${
                 current === originalValue ? 'text-amber-700 dark:text-amber-400 font-medium bg-amber-50/50 dark:bg-amber-900/10' : 'text-gray-700 dark:text-foreground-secondary'
               }`}
             >
-              当前生成
+              {t('descriptionCard.currentGenerated')}
             </button>
           )}
           {presets.map(p => (
-            <button
+            <div
               key={p}
-              onClick={() => { onSelect(p); setOpen(false); }}
-              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-banana-50 dark:hover:bg-banana-pale transition-colors ${
+              className={`group flex items-center px-3 py-1.5 text-xs hover:bg-banana-50 dark:hover:bg-banana-pale transition-colors ${
                 p === current ? 'text-amber-700 dark:text-amber-400 font-medium bg-amber-50/50 dark:bg-amber-900/10' : 'text-gray-700 dark:text-foreground-secondary'
               }`}
             >
-              {p}
-            </button>
+              <button
+                title={p}
+                onClick={() => { onSelect(p); setOpen(false); }}
+                className="flex-1 text-left truncate max-w-[160px]"
+              >
+                {p}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(p); }}
+                className="ml-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+              >
+                ×
+              </button>
+            </div>
           ))}
           <div className="border-t border-gray-100 dark:border-border-primary mt-1 pt-1">
             <button
@@ -379,7 +408,7 @@ function LayoutDropdown({ presets, current, originalValue, onSelect, onAdd }: {
               className="w-full text-left px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400 hover:bg-banana-50 dark:hover:bg-banana-pale flex items-center gap-1"
             >
               <Plus size={12} />
-              添加预设
+              {t('descriptionCard.addPreset')}
             </button>
           </div>
         </div>
