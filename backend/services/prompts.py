@@ -421,6 +421,8 @@ def get_page_description_prompt(project_context: 'ProjectContext', outline: list
 图片素材:
 [如果文件中存在图片请积极添加； 否则忽略图片素材字段]
 
+排版建议：[简要描述页面的结构布局，如"左文右图"、"居中布局"、"上下分栏"等，不包含颜色/字体/风格信息]
+
 ## 关于图片
 如果参考文件中包含以 /files/ 开头的本地文件URL图片（例如 /files/mineru/xxx/image.png），请将这些图片以markdown格式输出，例如：![图片描述](/files/mineru/xxx/image.png)。这些图片会被包含在PPT页面中。
 {get_language_instruction(language)}
@@ -428,6 +430,89 @@ def get_page_description_prompt(project_context: 'ProjectContext', outline: list
 
     final_prompt = files_xml + prompt
     logger.debug(f"[get_page_description_prompt] Final prompt:\n{final_prompt}")
+    return final_prompt
+
+
+def get_all_descriptions_stream_prompt(project_context: 'ProjectContext',
+                                       outline: list,
+                                       flat_pages: list,
+                                       language: str = None,
+                                       detail_level: str = "default") -> str:
+    """
+    一次性生成所有页面描述的 prompt（用于流式生成）
+
+    Args:
+        project_context: 项目上下文对象
+        outline: 完整大纲（可含 part 结构）
+        flat_pages: 扁平化后的页面列表（每项含 title, points, 可选 part）
+        language: 输出语言
+        detail_level: 描述详细程度 (concise/default/detailed)
+
+    Returns:
+        格式化后的 prompt 字符串
+    """
+    files_xml = _format_reference_files_xml(project_context.reference_files_content)
+
+    if project_context.creation_type == 'idea' and project_context.idea_prompt:
+        original_input = project_context.idea_prompt
+    elif project_context.creation_type == 'outline' and project_context.outline_text:
+        original_input = f"用户提供的大纲：\n{project_context.outline_text}"
+    elif project_context.creation_type == 'descriptions' and project_context.description_text:
+        original_input = f"用户提供的描述：\n{project_context.description_text}"
+    else:
+        original_input = project_context.idea_prompt or ""
+
+    detail_level_specs = {
+        'concise': '文字极致地压缩和精简',
+        'default': '清晰明了，每条要点控制在15-20字以内, 避免冗长的句子和复杂的表述',
+        'detailed': '忠于原文的基础上做到内容详实，逻辑清晰。',
+    }
+
+    # 构建页面大纲列表
+    outline_lines = []
+    for i, page in enumerate(flat_pages):
+        part_str = f"  [章节: {page['part']}]" if page.get('part') else ""
+        points_str = ", ".join(page.get('points', []))
+        outline_lines.append(f"第 {i + 1} 页：{page.get('title', '')}{part_str}\n  要点：{points_str}")
+    pages_outline_text = "\n".join(outline_lines)
+
+    prompt = (f"""\
+我们正在为PPT的每一页生成内容描述。
+用户的原始需求是：\n{original_input}\n
+完整大纲如下：
+{pages_outline_text}
+
+请为每一页依次生成描述，使用以下 Markdown 格式逐页输出。每页之间用 `<!-- PAGE_END -->` 分隔，全部完成后输出 `<!-- END -->`。
+
+## 重要提示
+- 生成的"页面文字"部分会直接渲染到PPT页面上，请务必不要包含任何额外的说明性文字或注释。
+- **第一页（封面页）保持极简**，只放标题、副标题、演讲人等信息，不添加任何素材。
+- 细致程度要求：{detail_level_specs[detail_level]}
+
+## 每页输出格式
+```
+## [页面标题]
+页面标题：[实际页面标题]
+
+页面文字：
+[页面文字内容, 可包含latex公式、表格等]
+
+图片素材：
+[如果参考文件中存在图片请积极添加；否则忽略此字段]
+
+排版建议：[简要描述页面的结构布局，如"左文右图"、"居中布局"、"上下分栏"等，不包含颜色/字体/风格信息]
+<!-- PAGE_END -->
+```
+
+## 关于图片
+如果参考文件中包含以 /files/ 开头的本地文件URL图片（例如 /files/mineru/xxx/image.png），请将这些图片以markdown格式输出，例如：![图片描述](/files/mineru/xxx/image.png)。
+
+现在请开始依次为每一页生成描述，严格按照上述格式输出。最后一页的 `<!-- PAGE_END -->` 之后输出 `<!-- END -->`。
+{get_language_instruction(language)}
+""")
+
+    final_prompt = files_xml + prompt
+    logger.debug(f"[get_all_descriptions_stream_prompt] Final prompt:\n{final_prompt}")
     return final_prompt
 
 

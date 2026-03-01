@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Edit2, FileText, RefreshCw } from 'lucide-react';
+import { Edit2, FileText, RefreshCw, Layout } from 'lucide-react';
 import { useT } from '@/hooks/useT';
 import { useImagePaste } from '@/hooks/useImagePaste';
 import { Card, ContextualStatusBadge, Button, Modal, Skeleton, Markdown } from '@/components/shared';
@@ -17,7 +17,8 @@ const descriptionCardI18n = {
       uploadingImage: "正在上传图片...",
       descriptionPlaceholder: "输入页面描述, 可包含页面文字、素材、排版设计等信息，支持粘贴图片",
       coverPage: "封面",
-      coverPageTooltip: "第一页为封面页，默认保持简洁风格"
+      coverPageTooltip: "第一页为封面页，默认保持简洁风格",
+      layoutSuggestion: "排版建议"
     }
   },
   en: {
@@ -28,7 +29,8 @@ const descriptionCardI18n = {
       uploadingImage: "Uploading image...",
       descriptionPlaceholder: "Enter page description, can include page text, materials, layout design, etc., support pasting images",
       coverPage: "Cover",
-      coverPageTooltip: "This is the cover page, default to keep simple style"
+      coverPageTooltip: "This is the cover page, default to keep simple style",
+      layoutSuggestion: "Layout Suggestion"
     }
   }
 };
@@ -54,6 +56,11 @@ const getDescriptionText = (descContent: DescriptionContent | undefined): string
   return '';
 };
 
+const getLayoutSuggestion = (descContent: DescriptionContent | undefined): string | undefined => {
+  if (!descContent) return undefined;
+  return descContent.layout_suggestion;
+};
+
 export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
   page,
   index,
@@ -66,6 +73,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
   const t = useT(descriptionCardI18n);
 
   const text = getDescriptionText(page.description_content);
+  const layoutSuggestion = getLayoutSuggestion(page.description_content);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
@@ -143,6 +151,15 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
           ) : text ? (
             <div className="text-sm text-gray-700 dark:text-foreground-secondary">
               <Markdown>{text}</Markdown>
+              {layoutSuggestion && (
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-border-primary">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-foreground-tertiary mb-1">
+                    <Layout size={12} />
+                    <span className="font-medium">{t('descriptionCard.layoutSuggestion')}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-foreground-tertiary">{layoutSuggestion}</p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-400 dark:text-foreground-tertiary">
@@ -212,5 +229,6 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
   prev.page.id === next.page.id &&
   prev.page.status === next.page.status &&
   prev.page.part === next.page.part &&
-  getDescriptionText(prev.page.description_content) === getDescriptionText(next.page.description_content)
+  getDescriptionText(prev.page.description_content) === getDescriptionText(next.page.description_content) &&
+  getLayoutSuggestion(prev.page.description_content) === getLayoutSuggestion(next.page.description_content)
 );

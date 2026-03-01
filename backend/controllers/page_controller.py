@@ -291,7 +291,7 @@ def generate_page_description(project_id, page_id):
         if page.part:
             page_data['part'] = page.part
         
-        desc_text = ai_service.generate_page_description(
+        desc_result = ai_service.generate_page_description(
             project_context,
             outline,
             page_data,
@@ -299,12 +299,14 @@ def generate_page_description(project_id, page_id):
             language=language,
             detail_level=detail_level
         )
-        
-        # Save description
+
+        # Save description (generate_page_description returns dict with text + optional layout_suggestion)
         desc_content = {
-            "text": desc_text,
+            "text": desc_result['text'],
             "generated_at": datetime.utcnow().isoformat()
         }
+        if desc_result.get('layout_suggestion'):
+            desc_content['layout_suggestion'] = desc_result['layout_suggestion']
         
         page.set_description_content(desc_content)
         page.status = 'DESCRIPTION_GENERATED'

@@ -256,6 +256,13 @@ def update_settings():
             else:
                 return bad_request("Output language must be 'zh', 'en', 'ja', or 'auto'")
 
+        # Update description generation mode
+        if "description_generation_mode" in data:
+            mode = data["description_generation_mode"]
+            if mode not in ("streaming", "parallel"):
+                return bad_request("description_generation_mode must be 'streaming' or 'parallel'")
+            settings.description_generation_mode = mode
+
         # Update reasoning mode configuration (separate for text and image)
         if "enable_text_reasoning" in data:
             settings.enable_text_reasoning = bool(data["enable_text_reasoning"])
@@ -355,6 +362,7 @@ def reset_settings():
         settings.text_thinking_budget = 1024
         settings.enable_image_reasoning = False
         settings.image_thinking_budget = 1024
+        settings.description_generation_mode = None
         settings.baidu_api_key = None
         settings.text_model_source = None
         settings.image_model_source = None

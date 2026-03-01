@@ -214,18 +214,19 @@ def generate_descriptions_task(task_id: str, project_id: str, ai_service,
                         from services.ai_service_manager import get_ai_service
                         ai_service = get_ai_service()
                         
-                        desc_text = ai_service.generate_page_description(
+                        desc_result = ai_service.generate_page_description(
                             project_context, outline, page_outline, page_index,
                             language=language,
                             detail_level=detail_level
                         )
-                        
-                        # Parse description into structured format
-                        # This is a simplified version - you may want more sophisticated parsing
+
+                        # generate_page_description returns dict with text + optional layout_suggestion
                         desc_content = {
-                            "text": desc_text,
+                            "text": desc_result['text'],
                             "generated_at": datetime.utcnow().isoformat()
                         }
+                        if desc_result.get('layout_suggestion'):
+                            desc_content['layout_suggestion'] = desc_result['layout_suggestion']
                         
                         return (page_id, desc_content, None)
                     except Exception as e:

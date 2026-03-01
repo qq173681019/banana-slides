@@ -33,6 +33,9 @@ class Settings(db.Model):
     enable_image_reasoning = db.Column(db.Boolean, nullable=False, default=False)  # 图像生成是否开启推理
     image_thinking_budget = db.Column(db.Integer, nullable=False, default=1024)  # 图像推理思考负载 (1-8192)
     
+    # 描述生成模式: streaming / parallel (NULL=默认 streaming)
+    description_generation_mode = db.Column(db.String(20), nullable=True)
+
     # 百度 API 配置
     baidu_api_key = db.Column(db.String(500), nullable=True)  # 百度 API Key
 
@@ -82,6 +85,7 @@ class Settings(db.Model):
             'mineru_token_length': len(mineru_token) if mineru_token else 0,
             'image_caption_model': self._val('image_caption_model', d),
             'output_language': self._val('output_language', d),
+            'description_generation_mode': self._val('description_generation_mode', d) or 'streaming',
             'enable_text_reasoning': self.enable_text_reasoning,
             'text_thinking_budget': self.text_thinking_budget,
             'enable_image_reasoning': self.enable_image_reasoning,
