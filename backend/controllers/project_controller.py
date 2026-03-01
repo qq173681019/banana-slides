@@ -869,8 +869,6 @@ def generate_descriptions_stream(project_id):
                 db.session.commit()
 
                 # Stream descriptions
-                page_id_map = {i: pages[i].id for i in range(len(pages))}
-
                 for result in ai_service.generate_descriptions_stream(
                     project_context, outline, flat_pages,
                     language=language, detail_level=detail_level
