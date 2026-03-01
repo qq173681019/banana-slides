@@ -106,6 +106,13 @@ def _format_reference_files_xml(reference_files_content: Optional[List[Dict[str,
     return '\n'.join(xml_parts)
 
 
+def _format_requirements(requirements: str) -> str:
+    """格式化用户提供的生成要求，返回可直接拼接到 prompt 中的文本段"""
+    if requirements and requirements.strip():
+        return f"## Requirements\n{requirements.strip()}\n\n"
+    return ""
+
+
 def get_outline_generation_prompt(project_context: 'ProjectContext', language: str = None) -> str:
     """
     生成 PPT 大纲的 prompt
@@ -149,10 +156,11 @@ You can organize the content in two ways:
 Choose the format that best fits the content. Use parts when the PPT has clear major sections.
 Unless otherwise specified, the first page should be kept simplest, containing only the title, subtitle, and presenter information.
 
-The user's request: {idea_prompt}. Now generate the outline, don't include any other text.
+The user's request: {idea_prompt}.
+{_format_requirements(project_context.outline_requirements)}Now generate the outline, don't include any other text.
 {get_language_instruction(language)}
 """)
-    
+
     final_prompt = files_xml + prompt
     logger.debug(f"[get_outline_generation_prompt] Final prompt:\n{final_prompt}")
     return final_prompt
@@ -203,7 +211,8 @@ Constraints:
 - Choose the format that best fits the content. Use parts when the PPT has clear major sections. 
 - Unless otherwise specified, the first page should be kept simplest, containing only the title, subtitle, and presenter information. 
 
-The user's request: {idea_prompt}. Now generate the outline, strictly follow the format provided above, don't include any other text. Output `<!-- END -->` on the last line when finished.
+The user's request: {idea_prompt}.
+{_format_requirements(project_context.outline_requirements)}Now generate the outline, strictly follow the format provided above, don't include any other text. Output `<!-- END -->` on the last line when finished.
 {get_language_instruction(language)}
 """)
 
@@ -334,7 +343,7 @@ Important rules:
 Now parse the outline text above into the structured format. Return only the JSON, don't include any other text.
 {get_language_instruction(language)}
 """)
-    
+
     final_prompt = files_xml + prompt
     logger.debug(f"[get_outline_parsing_prompt] Final prompt:\n{final_prompt}")
     return final_prompt
@@ -386,7 +395,7 @@ def get_page_description_prompt(project_context: 'ProjectContext', outline: list
 我们正在为PPT的每一页生成内容描述。
 用户的原始需求是：\n{original_input}\n
 我们已经有了完整的大纲：\n{outline}\n{part_info}
-现在请为第 {page_index} 页生成描述：
+{_format_requirements(project_context.description_requirements)}现在请为第 {page_index} 页生成描述：
 {page_outline}
 {"**除非特殊要求，第一页的内容需要保持极简，只放标题副标题以及演讲人等（输出到标题后）, 不添加任何素材。**" if page_index == 1 else ""}
 
@@ -405,10 +414,9 @@ def get_page_description_prompt(project_context: 'ProjectContext', outline: list
 
 ## 关于图片
 如果参考文件中包含以 /files/ 开头的本地文件URL图片（例如 /files/mineru/xxx/image.png），请将这些图片以markdown格式输出，例如：![图片描述](/files/mineru/xxx/image.png)。这些图片会被包含在PPT页面中。
-
 {get_language_instruction(language)}
 """)
-    
+
     final_prompt = files_xml + prompt
     logger.debug(f"[get_page_description_prompt] Final prompt:\n{final_prompt}")
     return final_prompt
@@ -569,7 +577,7 @@ Important rules:
 Now extract the outline structure from the description text above. Return only the JSON, don't include any other text.
 {get_language_instruction(language)}
 """)
-    
+
     final_prompt = files_xml + prompt
     logger.debug(f"[get_description_to_outline_prompt] Final prompt:\n{final_prompt}")
     return final_prompt
