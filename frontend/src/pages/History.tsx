@@ -36,6 +36,7 @@ const historyI18n = {
       deleteFailed: '删除项目失败',
       openFailed: '打开项目失败',
       loadFailed: '加载历史项目失败',
+      perPage: '条/页',
       titleEmpty: '项目名称不能为空',
       titleUpdated: '项目名称已更新',
       titleUpdateFailed: '更新项目名称失败',
@@ -63,6 +64,7 @@ const historyI18n = {
       deleteFailed: 'Failed to delete project',
       openFailed: 'Failed to open project',
       loadFailed: 'Failed to load project history',
+      perPage: '/ page',
       titleEmpty: 'Project name cannot be empty',
       titleUpdated: 'Project name updated',
       titleUpdateFailed: 'Failed to update project name',
@@ -70,7 +72,8 @@ const historyI18n = {
   },
 };
 
-const PAGE_SIZE = 5;
+const DEFAULT_PAGE_SIZE = 5;
+const PAGE_SIZE_KEY = 'history_page_size';
 
 export const History: React.FC = () => {
   const navigate = useNavigate();
@@ -82,6 +85,10 @@ export const History: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [totalProjects, setTotalProjects] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(() => {
+    const saved = localStorage.getItem(PAGE_SIZE_KEY);
+    return saved ? Number(saved) : DEFAULT_PAGE_SIZE;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
@@ -91,14 +98,14 @@ export const History: React.FC = () => {
   const { show, ToastContainer } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
-  const totalPages = Math.ceil(totalProjects / PAGE_SIZE);
+  const totalPages = Math.ceil(totalProjects / pageSize);
 
   const loadProjects = useCallback(async (page: number) => {
     setIsLoading(true);
     setError(null);
     try {
-      const offset = (page - 1) * PAGE_SIZE;
-      const response = await api.listProjects(PAGE_SIZE, offset);
+      const offset = (page - 1) * pageSize;
+      const response = await api.listProjects(pageSize, offset);
       if (response.data?.projects) {
         const normalizedProjects = response.data.projects.map(normalizeProject);
         setProjects(normalizedProjects);
@@ -111,17 +118,24 @@ export const History: React.FC = () => {
       setIsLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pageSize]);
 
   useEffect(() => {
     loadProjects(currentPage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage]);
+  }, [currentPage, pageSize]);
 
   const handlePageChange = useCallback((page: number) => {
     setSelectedProjects(new Set());
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handlePageSizeChange = useCallback((size: number) => {
+    localStorage.setItem(PAGE_SIZE_KEY, String(size));
+    setPageSize(size);
+    setCurrentPage(1);
+    setSelectedProjects(new Set());
   }, []);
 
   // ===== 项目选择与导航 =====
@@ -444,6 +458,9 @@ export const History: React.FC = () => {
                 currentPage={currentPage}
                 totalPages={totalPages}
                 onPageChange={handlePageChange}
+                pageSize={pageSize}
+                onPageSizeChange={handlePageSizeChange}
+                pageSizeLabel={t('history.perPage')}
               />
             </div>
           </div>

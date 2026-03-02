@@ -6,14 +6,23 @@ interface PaginationProps {
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  pageSize?: number;
+  onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: number[];
+  pageSizeLabel?: string;
 }
 
 export const Pagination: React.FC<PaginationProps> = ({
   currentPage,
   totalPages,
   onPageChange,
+  pageSize,
+  onPageSizeChange,
+  pageSizeOptions = [5, 10, 20],
+  pageSizeLabel = '/ page',
 }) => {
-  if (totalPages <= 1) return null;
+  // When only page size selector is needed (totalPages <= 1), still render if onPageSizeChange is provided
+  if (totalPages <= 1 && !onPageSizeChange) return null;
 
   const getPageNumbers = (): (number | 'ellipsis')[] => {
     // Show all pages when total is small enough
@@ -36,13 +45,13 @@ export const Pagination: React.FC<PaginationProps> = ({
 
   const buttonBase =
     'flex items-center justify-center rounded-lg transition-all duration-200 select-none';
-  const pageSize = 'w-9 h-9 text-sm';
+  const btnSize = 'w-9 h-9 text-sm';
 
   return (
     <nav className="flex items-center justify-center gap-1.5" aria-label="Pagination">
       {/* Previous */}
       <button
-        className={cn(buttonBase, pageSize, 'text-gray-500 dark:text-foreground-tertiary', {
+        className={cn(buttonBase, btnSize, 'text-gray-500 dark:text-foreground-tertiary', {
           'hover:bg-gray-100 dark:hover:bg-background-hover cursor-pointer': currentPage > 1,
           'opacity-30 cursor-not-allowed': currentPage <= 1,
         })}
@@ -65,7 +74,7 @@ export const Pagination: React.FC<PaginationProps> = ({
         ) : (
           <button
             key={page}
-            className={cn(buttonBase, pageSize, 'font-medium', {
+            className={cn(buttonBase, btnSize, 'font-medium', {
               'bg-banana-500 text-black shadow-sm': page === currentPage,
               'text-gray-700 dark:text-foreground-secondary hover:bg-gray-100 dark:hover:bg-background-hover':
                 page !== currentPage,
@@ -80,7 +89,7 @@ export const Pagination: React.FC<PaginationProps> = ({
 
       {/* Next */}
       <button
-        className={cn(buttonBase, pageSize, 'text-gray-500 dark:text-foreground-tertiary', {
+        className={cn(buttonBase, btnSize, 'text-gray-500 dark:text-foreground-tertiary', {
           'hover:bg-gray-100 dark:hover:bg-background-hover cursor-pointer': currentPage < totalPages,
           'opacity-30 cursor-not-allowed': currentPage >= totalPages,
         })}
@@ -90,6 +99,19 @@ export const Pagination: React.FC<PaginationProps> = ({
       >
         <ChevronRight size={18} />
       </button>
+
+      {/* Page size selector */}
+      {onPageSizeChange && (
+        <select
+          value={pageSize}
+          onChange={(e) => onPageSizeChange(Number(e.target.value))}
+          className="ml-3 h-9 px-2 text-sm rounded-lg border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary text-gray-700 dark:text-foreground-secondary cursor-pointer focus:outline-none focus:ring-1 focus:ring-banana-500"
+        >
+          {pageSizeOptions.map((size) => (
+            <option key={size} value={size}>{size} {pageSizeLabel}</option>
+          ))}
+        </select>
+      )}
     </nav>
   );
 };
