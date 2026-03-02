@@ -235,7 +235,7 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
             onChange={setEditContent}
             onPaste={handlePaste}
             onFiles={handleFiles}
-            rows={12}
+            rows={6}
             placeholder={t('descriptionCard.descriptionPlaceholder')}
           />
           {/* 额外字段编辑 */}
