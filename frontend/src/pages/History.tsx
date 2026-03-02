@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Home, Trash2, Sun, Moon } from 'lucide-react';
-import { Button, Loading, Card, useToast, useConfirm } from '@/components/shared';
+import { Button, Loading, Card, Pagination, useToast, useConfirm } from '@/components/shared';
 import { ProjectCard } from '@/components/history/ProjectCard';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useTheme } from '@/hooks/useTheme';
@@ -70,14 +70,18 @@ const historyI18n = {
   },
 };
 
+const PAGE_SIZE = 5;
+
 export const History: React.FC = () => {
   const navigate = useNavigate();
   const { i18n } = useTranslation();
   const t = useT(historyI18n); // 组件内翻译 + 自动 fallback 到全局
   const { isDark, setTheme } = useTheme();
   const { syncProject, setCurrentProject } = useProjectStore();
-  
+
   const [projects, setProjects] = useState<Project[]>([]);
+  const [totalProjects, setTotalProjects] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
@@ -87,20 +91,18 @@ export const History: React.FC = () => {
   const { show, ToastContainer } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
 
-  useEffect(() => {
-    loadProjects();
-  }, []);
+  const totalPages = Math.ceil(totalProjects / PAGE_SIZE);
 
-  // ===== 数据加载 =====
-
-  const loadProjects = useCallback(async () => {
+  const loadProjects = useCallback(async (page: number) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.listProjects(50, 0);
+      const offset = (page - 1) * PAGE_SIZE;
+      const response = await api.listProjects(PAGE_SIZE, offset);
       if (response.data?.projects) {
         const normalizedProjects = response.data.projects.map(normalizeProject);
         setProjects(normalizedProjects);
+        setTotalProjects(response.data.total ?? 0);
       }
     } catch (err: any) {
       console.error('加载历史项目失败:', err);
@@ -108,7 +110,18 @@ export const History: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-     
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    loadProjects(currentPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage]);
+
+  const handlePageChange = useCallback((page: number) => {
+    setSelectedProjects(new Set());
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   // ===== 项目选择与导航 =====
@@ -366,7 +379,7 @@ export const History: React.FC = () => {
           <Card className="p-8 text-center">
             <div className="text-6xl mb-4">⚠️</div>
             <p className="text-gray-600 dark:text-foreground-tertiary mb-4">{error}</p>
-            <Button variant="primary" onClick={loadProjects}>
+            <Button variant="primary" onClick={() => loadProjects(currentPage)}>
               {t('common.retry')}
             </Button>
           </Card>
@@ -405,7 +418,7 @@ export const History: React.FC = () => {
             {projects.map((project) => {
               const projectId = project.id || project.project_id;
               if (!projectId) return null;
-              
+
               return (
                 <ProjectCard
                   key={projectId}
@@ -424,6 +437,15 @@ export const History: React.FC = () => {
                 />
               );
             })}
+
+            {/* 分页 */}
+            <div className="pt-4">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+              />
+            </div>
           </div>
         )}
       </main>
