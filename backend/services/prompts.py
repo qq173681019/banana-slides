@@ -482,7 +482,7 @@ def get_all_descriptions_stream_prompt(project_context: 'ProjectContext',
 完整大纲如下：
 {pages_outline_text}
 
-请为每一页依次生成描述，使用以下 Markdown 格式逐页输出。每页之间用 `<!-- PAGE_END -->` 分隔，全部完成后输出 `<!-- END -->`。
+{_format_requirements(project_context.description_requirements)}请为每一页依次生成描述，使用以下 Markdown 格式逐页输出。每页之间用 `<!-- PAGE_END -->` 分隔，全部完成后输出 `<!-- END -->`。
 
 ## 重要提示
 - 生成的"页面文字"部分会直接渲染到PPT页面上，请务必不要包含任何额外的说明性文字或注释。
