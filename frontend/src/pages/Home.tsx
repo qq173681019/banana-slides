@@ -880,7 +880,7 @@ export const Home: React.FC = () => {
         <Card className="p-4 md:p-10 bg-white/90 dark:bg-background-secondary backdrop-blur-xl dark:backdrop-blur-none shadow-2xl dark:shadow-none border-0 dark:border dark:border-border-primary hover:shadow-3xl dark:hover:shadow-none transition-all duration-300 dark:rounded-2xl">
           {/* 选项卡 */}
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-6 md:mb-8">
-            {(Object.keys(tabConfig) as CreationType[]).map((type) => {
+            {(Object.keys(tabConfig) as CreationType[]).filter(type => type !== 'ppt_renovation').map((type) => {
               const config = tabConfig[type];
               return (
                 <button
