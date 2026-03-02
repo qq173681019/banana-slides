@@ -220,13 +220,13 @@ def generate_descriptions_task(task_id: str, project_id: str, ai_service,
                             detail_level=detail_level
                         )
 
-                        # generate_page_description returns dict with text + optional layout_suggestion
+                        # generate_page_description returns dict with text + optional extra_fields
                         desc_content = {
                             "text": desc_result['text'],
                             "generated_at": datetime.utcnow().isoformat()
                         }
-                        if desc_result.get('layout_suggestion'):
-                            desc_content['layout_suggestion'] = desc_result['layout_suggestion']
+                        if desc_result.get('extra_fields'):
+                            desc_content['extra_fields'] = desc_result['extra_fields']
                         
                         return (page_id, desc_content, None)
                     except Exception as e:

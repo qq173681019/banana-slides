@@ -247,7 +247,7 @@ export interface DescriptionStreamEvent {
   page_index: number;
   page_id: string;
   text: string;
-  layout_suggestion?: string;
+  extra_fields?: Record<string, string>;
 }
 
 export interface DescriptionStreamCallbacks {

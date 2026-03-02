@@ -496,22 +496,55 @@ class AIService:
         return pages
     
     @staticmethod
-    def _parse_layout_suggestion(text: str) -> tuple:
+    def _parse_extra_fields(text: str, field_names: list) -> tuple:
         """
-        从描述文本中解析排版建议，返回 (description_text, layout_suggestion)。
+        从描述文本中解析额外字段，返回 (cleaned_text, extra_fields_dict)。
+
+        遍历 field_names，按出现顺序依次提取每个字段的内容。
+        两个相邻字段之间的文本属于前一个字段。
         """
-        layout_suggestion = None
-        description_text = text
-        # 匹配 "排版建议：" 或 "排版建议:" 行
-        match = re.search(r'\n排版建议[：:]\s*', text)
-        if match:
-            layout_suggestion = text[match.end():].strip()
-            description_text = text[:match.start()].strip()
-            # layout_suggestion 可能还包含后续的 <!-- PAGE_END --> 等标记，清理掉
-            layout_suggestion = re.sub(r'<!--.*?-->', '', layout_suggestion).strip()
-            if not layout_suggestion:
-                layout_suggestion = None
-        return description_text, layout_suggestion
+        if not field_names:
+            return text, {}
+
+        extra_fields = {}
+        # 找到所有字段在文本中的起始位置
+        positions = []
+        for name in field_names:
+            match = re.search(rf'\n{re.escape(name)}[：:]\s*', text)
+            if match:
+                positions.append((match.start(), match.end(), name))
+
+        if not positions:
+            return text, {}
+
+        # 按位置排序
+        positions.sort(key=lambda x: x[0])
+
+        # 提取每个字段的值
+        for i, (start, end, name) in enumerate(positions):
+            if i + 1 < len(positions):
+                value = text[end:positions[i + 1][0]].strip()
+            else:
+                value = text[end:].strip()
+            # 清理 HTML 注释标记
+            value = re.sub(r'<!--.*?-->', '', value).strip()
+            if value:
+                extra_fields[name] = value
+
+        # 清理后的描述文本（截取到第一个字段之前）
+        cleaned_text = text[:positions[0][0]].strip()
+
+        return cleaned_text, extra_fields
+
+    @staticmethod
+    def _get_extra_field_names() -> list:
+        """从 Settings 读取配置的额外字段名列表。"""
+        try:
+            from models import Settings
+            settings = Settings.get_settings()
+            return settings.get_description_extra_fields()
+        except Exception:
+            return ['排版建议']
 
     def generate_page_description(self, project_context: ProjectContext, outline: List[Dict],
                                  page_outline: Dict, page_index: int, language='zh',
@@ -528,8 +561,9 @@ class AIService:
             detail_level: Description detail level (concise/default/detailed)
 
         Returns:
-            Dict with 'text' and optional 'layout_suggestion'
+            Dict with 'text' and optional 'extra_fields'
         """
+        extra_field_names = self._get_extra_field_names()
         part_info = f"\nThis page belongs to: {page_outline['part']}" if 'part' in page_outline else ""
 
         desc_prompt = get_page_description_prompt(
@@ -539,7 +573,8 @@ class AIService:
             page_index=page_index,
             part_info=part_info,
             language=language,
-            detail_level=detail_level
+            detail_level=detail_level,
+            extra_fields=extra_field_names,
         )
 
         # 根据 enable_text_reasoning 配置调整 thinking_budget
@@ -547,11 +582,11 @@ class AIService:
         response_text = self.text_provider.generate_text(desc_prompt, thinking_budget=actual_budget)
 
         text = dedent(response_text)
-        description_text, layout_suggestion = self._parse_layout_suggestion(text)
+        description_text, extra_fields = self._parse_extra_fields(text, extra_field_names)
 
         result = {'text': description_text}
-        if layout_suggestion:
-            result['layout_suggestion'] = layout_suggestion
+        if extra_fields:
+            result['extra_fields'] = extra_fields
         return result
 
     def generate_descriptions_stream(self, project_context: ProjectContext,
@@ -561,35 +596,92 @@ class AIService:
         """
         Stream description generation for all pages, yielding each page as it's completed.
 
-        Yields dicts: {page_index, description_text, layout_suggestion}
+        Yields dicts: {page_index, description_text, extra_fields}
         Final yield: {__stream_complete__: bool}
         """
+        extra_field_names = self._get_extra_field_names()
+
         prompt = get_all_descriptions_stream_prompt(
             project_context=project_context,
             outline=outline,
             flat_pages=flat_pages,
             language=language,
             detail_level=detail_level,
+            extra_fields=extra_field_names,
         )
+
+        # Build regex pattern to detect any configured extra field header
+        field_pattern = self._build_extra_field_pattern(extra_field_names)
 
         actual_budget = self._get_text_thinking_budget()
         buffer = ""
         page_index = -1
-        current_lines = []
-        current_section = "description"  # description or layout
-        layout_suggestion = None
+        current_lines: list = []
+        current_field: Optional[str] = None  # None = description, str = field name
+        extra_fields: Dict[str, str] = {}
         stream_complete = False
 
         def _build_page_result():
             """Build result dict from accumulated state."""
             desc_text = "\n".join(current_lines).strip()
-            result = {
+            result: Dict = {
                 'page_index': page_index,
                 'description_text': desc_text,
             }
-            if layout_suggestion:
-                result['layout_suggestion'] = layout_suggestion
+            if extra_fields:
+                result['extra_fields'] = dict(extra_fields)
             return result
+
+        def _reset_page_state():
+            nonlocal current_lines, current_field, extra_fields
+            current_lines = []
+            current_field = None
+            extra_fields = {}
+
+        def _process_line(line: str, stripped: str):
+            nonlocal page_index, current_field, stream_complete
+
+            if stripped == '<!-- END -->':
+                stream_complete = True
+                return 'continue'
+
+            if stripped == '<!-- PAGE_END -->':
+                if page_index >= 0 and current_lines:
+                    return 'yield_page'
+                _reset_page_state()
+                return 'continue'
+
+            if stripped.startswith('## '):
+                if page_index >= 0 and current_lines:
+                    result = 'yield_and_reset'
+                else:
+                    result = 'continue'
+                page_index += 1
+                return result
+
+            # Check for extra field header
+            if field_pattern:
+                field_match = field_pattern.match(stripped)
+                if field_match:
+                    field_name = field_match.group(1)
+                    current_field = field_name
+                    value = field_match.group(2).strip()
+                    if value:
+                        extra_fields[field_name] = value
+                    return 'continue'
+
+            if not stripped or page_index < 0:
+                return 'continue'
+
+            if current_field:
+                # Append to current extra field (multi-line)
+                if current_field in extra_fields:
+                    extra_fields[current_field] += " " + stripped
+                else:
+                    extra_fields[current_field] = stripped
+            else:
+                current_lines.append(line.rstrip())
+            return 'continue'
 
         for chunk in self.text_provider.generate_text_stream(prompt, thinking_budget=actual_budget):
             buffer += chunk
@@ -597,92 +689,37 @@ class AIService:
             while '\n' in buffer:
                 line, buffer = buffer.split('\n', 1)
                 stripped = line.strip()
+                action = _process_line(line, stripped)
 
-                if stripped == '<!-- END -->':
-                    stream_complete = True
-                    continue
-
-                if stripped == '<!-- PAGE_END -->':
-                    # Yield current page
-                    if page_index >= 0 and current_lines:
-                        yield _build_page_result()
-                    # Reset for next page
-                    current_lines = []
-                    current_section = "description"
-                    layout_suggestion = None
-                    continue
-
-                if stripped.startswith('## '):
-                    # New page header — if we have accumulated content, yield it
-                    if page_index >= 0 and current_lines:
-                        yield _build_page_result()
-                        current_lines = []
-                        current_section = "description"
-                        layout_suggestion = None
-                    page_index += 1
-                    continue
-
-                # Check for layout suggestion section
-                layout_match = re.match(r'^排版建议[：:]\s*(.*)', stripped)
-                if layout_match:
-                    current_section = "layout"
-                    suggestion_text = layout_match.group(1).strip()
-                    if suggestion_text:
-                        layout_suggestion = suggestion_text
-                    continue
-
-                if not stripped:
-                    continue
-
-                if page_index < 0:
-                    continue
-
-                if current_section == "layout":
-                    # Append to layout suggestion (multi-line)
-                    if layout_suggestion:
-                        layout_suggestion += " " + stripped
-                    else:
-                        layout_suggestion = stripped
-                else:
-                    current_lines.append(line.rstrip())
+                if action == 'yield_page':
+                    yield _build_page_result()
+                    _reset_page_state()
+                elif action == 'yield_and_reset':
+                    yield _build_page_result()
+                    _reset_page_state()
 
         # Process remaining buffer
         if buffer.strip():
             for line in buffer.split('\n'):
                 stripped = line.strip()
-                if stripped == '<!-- END -->':
-                    stream_complete = True
-                elif stripped == '<!-- PAGE_END -->':
-                    if page_index >= 0 and current_lines:
-                        yield _build_page_result()
-                    current_lines = []
-                    current_section = "description"
-                    layout_suggestion = None
-                elif stripped.startswith('## '):
-                    if page_index >= 0 and current_lines:
-                        yield _build_page_result()
-                        current_lines = []
-                        current_section = "description"
-                        layout_suggestion = None
-                    page_index += 1
-                elif stripped:
-                    layout_match = re.match(r'^排版建议[：:]\s*(.*)', stripped)
-                    if layout_match:
-                        current_section = "layout"
-                        suggestion_text = layout_match.group(1).strip()
-                        if suggestion_text:
-                            layout_suggestion = suggestion_text
-                    elif page_index >= 0:
-                        if current_section == "layout":
-                            layout_suggestion = (layout_suggestion + " " + stripped) if layout_suggestion else stripped
-                        else:
-                            current_lines.append(line.rstrip())
+                action = _process_line(line, stripped)
+                if action in ('yield_page', 'yield_and_reset'):
+                    yield _build_page_result()
+                    _reset_page_state()
 
         # Yield last page if not yet yielded
         if page_index >= 0 and current_lines:
             yield _build_page_result()
 
         yield {'__stream_complete__': stream_complete}
+
+    @staticmethod
+    def _build_extra_field_pattern(field_names: list):
+        """Build a compiled regex pattern that matches any extra field header."""
+        if not field_names:
+            return None
+        escaped = '|'.join(re.escape(name) for name in field_names)
+        return re.compile(rf'^({escaped})[：:]\s*(.*)')
     
     def generate_outline_text(self, outline: List[Dict]) -> str:
         """

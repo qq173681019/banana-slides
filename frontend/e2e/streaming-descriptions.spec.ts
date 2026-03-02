@@ -61,7 +61,7 @@ test.describe('Streaming Descriptions - Mock Tests', () => {
           page_index: i,
           page_id: p.page_id,
           text: `页面标题：Page ${i + 1}\n\n页面文字：\n- Content for page ${i + 1}`,
-          layout_suggestion: i === 0 ? '居中布局，大标题' : '左文右图',
+          extra_fields: i === 0 ? { '排版建议': '居中布局，大标题' } : { '排版建议': '左文右图' },
         })}\n\n`;
         return descEvent;
       });
@@ -73,7 +73,7 @@ test.describe('Streaming Descriptions - Mock Tests', () => {
           status: 'DESCRIPTION_GENERATED',
           description_content: {
             text: `页面标题：Page ${i + 1}\n\n页面文字：\n- Content for page ${i + 1}`,
-            layout_suggestion: i === 0 ? '居中布局，大标题' : '左文右图',
+            extra_fields: i === 0 ? { '排版建议': '居中布局，大标题' } : { '排版建议': '左文右图' },
           },
         })),
       })}\n\n`;
@@ -110,22 +110,22 @@ test.describe('Streaming Descriptions - Mock Tests', () => {
     expect(mockCalled).toBe(true);
   });
 
-  test('should display layout suggestion when present', async ({ page }) => {
-    const projectId = await createProjectWithOutline(page, 'Test layout suggestion');
+  test('should display extra fields when present', async ({ page }) => {
+    const projectId = await createProjectWithOutline(page, 'Test extra fields display');
 
     // Get page IDs
     const projectResp = await page.request.get(`${BASE_URL}/api/projects/${projectId}`);
     const projectData = await projectResp.json();
     const pages = projectData.data?.pages || [];
 
-    // Update a page with description_content that includes layout_suggestion
+    // Update a page with description_content that includes extra_fields
     await page.request.put(
       `${BASE_URL}/api/projects/${projectId}/pages/${pages[0].page_id}/description`,
       {
         data: {
           description_content: {
             text: '页面标题：Test Page\n\n页面文字：\n- Test content',
-            layout_suggestion: '居中布局，大标题+副标题',
+            extra_fields: { '排版建议': '居中布局，大标题+副标题' },
           },
         },
       }
@@ -135,9 +135,37 @@ test.describe('Streaming Descriptions - Mock Tests', () => {
     await page.goto(`${BASE_URL}/project/${projectId}/detail`);
     await page.waitForLoadState('networkidle');
 
-    // Check layout suggestion is displayed
-    await expect(page.locator('text=排版建议').or(page.locator('text=Layout Suggestion'))).toBeVisible({ timeout: 5000 });
+    // Check extra field is displayed
+    await expect(page.locator('text=排版建议')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('text=居中布局，大标题+副标题')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should display extra fields from old layout_suggestion format (backward compat)', async ({ page }) => {
+    const projectId = await createProjectWithOutline(page, 'Test backward compat');
+
+    const projectResp = await page.request.get(`${BASE_URL}/api/projects/${projectId}`);
+    const projectData = await projectResp.json();
+    const pages = projectData.data?.pages || [];
+
+    // Old format with layout_suggestion
+    await page.request.put(
+      `${BASE_URL}/api/projects/${projectId}/pages/${pages[0].page_id}/description`,
+      {
+        data: {
+          description_content: {
+            text: '测试页面内容',
+            layout_suggestion: '左右分栏布局',
+          },
+        },
+      }
+    );
+
+    await page.goto(`${BASE_URL}/project/${projectId}/detail`);
+    await page.waitForLoadState('networkidle');
+
+    // Old layout_suggestion should be mapped to "排版建议" field
+    await expect(page.locator('text=排版建议')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=左右分栏布局')).toBeVisible({ timeout: 5000 });
   });
 
   test('should fall back to parallel mode when setting is parallel', async ({ page }) => {
@@ -198,41 +226,48 @@ test.describe('Streaming Descriptions - Mock Tests', () => {
 // ===== Integration Tests =====
 
 test.describe('Streaming Descriptions - Integration Tests', () => {
-  test('settings page should show description generation mode toggle', async ({ page }) => {
-    await page.goto(`${BASE_URL}/settings`);
+  test('DetailEditor settings panel should show generation mode and extra fields', async ({ page }) => {
+    const projectId = await createProjectWithOutline(page, 'Test settings panel');
+    await page.goto(`${BASE_URL}/project/${projectId}/detail`);
     await page.waitForLoadState('networkidle');
 
-    // Check the toggle exists
-    const modeLabel = page.locator('text=描述生成模式').or(page.locator('text=Description Generation Mode'));
-    await expect(modeLabel).toBeVisible({ timeout: 5000 });
+    // Find the Settings2 button by its title attribute
+    const gearBtn = page.locator('button[title="描述设置"], button[title="Description Settings"]');
+    await expect(gearBtn).toBeVisible({ timeout: 5000 });
+    await gearBtn.click();
 
-    // Check both options are present
-    const streamingBtn = page.locator('button').filter({ hasText: /流式|Streaming/ });
-    const parallelBtn = page.locator('button').filter({ hasText: /并行|Parallel/ });
-    await expect(streamingBtn.first()).toBeVisible();
-    await expect(parallelBtn.first()).toBeVisible();
+    // Check generation mode buttons
+    await expect(page.locator('text=流式').or(page.locator('text=Streaming'))).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('text=并行').or(page.locator('text=Parallel'))).toBeVisible({ timeout: 3000 });
+
+    // Check detail level buttons
+    await expect(page.locator('text=精简').or(page.locator('text=Concise'))).toBeVisible();
+    await expect(page.locator('text=默认').or(page.locator('text=Default'))).toBeVisible();
+    await expect(page.locator('text=详细').or(page.locator('text=Detailed'))).toBeVisible();
+
+    // Check extra fields section
+    await expect(page.locator('text=额外字段').or(page.locator('text=Extra Fields'))).toBeVisible();
+    // Default field "排版建议" should be shown
+    await expect(page.locator('text=排版建议')).toBeVisible();
   });
 
-  test('settings should persist description generation mode', async ({ page }) => {
-    await page.goto(`${BASE_URL}/settings`);
+  test('should persist generation mode via settings API', async ({ page }) => {
+    const projectId = await createProjectWithOutline(page, 'Test mode persist');
+    await page.goto(`${BASE_URL}/project/${projectId}/detail`);
     await page.waitForLoadState('networkidle');
+
+    // Open settings panel
+    const gearBtn = page.locator('button[title="描述设置"], button[title="Description Settings"]');
+    await gearBtn.click();
 
     // Click parallel button
     const parallelBtn = page.locator('button').filter({ hasText: /并行|Parallel/ });
     await parallelBtn.first().click();
 
-    // Save settings
-    const saveBtn = page.locator('button').filter({ hasText: /保存|Save/ });
-    await saveBtn.first().click();
+    // Wait for debounced save
+    await page.waitForTimeout(1500);
 
-    // Wait for save to complete
-    await page.waitForTimeout(2000);
-
-    // Reload and verify
-    await page.reload();
-    await page.waitForLoadState('networkidle');
-
-    // Check that the API returns parallel mode
+    // Verify via API
     const settingsResp = await page.request.get(`${BASE_URL}/api/settings`);
     const settingsData = await settingsResp.json();
     expect(settingsData.data?.description_generation_mode).toBe('parallel');
@@ -243,21 +278,86 @@ test.describe('Streaming Descriptions - Integration Tests', () => {
     });
   });
 
-  test('single page regeneration should still work and return layout suggestion', async ({ page }) => {
-    const projectId = await createProjectWithOutline(page, 'Test single page regen');
+  test('should add and remove extra fields', async ({ page }) => {
+    const projectId = await createProjectWithOutline(page, 'Test extra fields config');
+    await page.goto(`${BASE_URL}/project/${projectId}/detail`);
+    await page.waitForLoadState('networkidle');
 
-    // Get page IDs
+    // Open settings panel
+    const gearBtn = page.locator('button[title="描述设置"], button[title="Description Settings"]');
+    await gearBtn.click();
+
+    // Add a new field
+    const fieldInput = page.locator('input[placeholder="添加字段"], input[placeholder="Add Field"]');
+    await fieldInput.fill('配图建议');
+    await fieldInput.press('Enter');
+
+    // Wait for debounced save
+    await page.waitForTimeout(1500);
+
+    // Verify via API
+    const settingsResp = await page.request.get(`${BASE_URL}/api/settings`);
+    const settingsData = await settingsResp.json();
+    expect(settingsData.data?.description_extra_fields).toContain('配图建议');
+    expect(settingsData.data?.description_extra_fields).toContain('排版建议');
+
+    // Clean up: reset extra fields
+    await page.request.put(`${BASE_URL}/api/settings`, {
+      data: { description_extra_fields: ['排版建议'] },
+    });
+  });
+
+  test('edit dialog should preserve extra fields on save', async ({ page }) => {
+    const projectId = await createProjectWithOutline(page, 'Test edit extra fields');
+
     const projectResp = await page.request.get(`${BASE_URL}/api/projects/${projectId}`);
     const projectData = await projectResp.json();
     const pages = projectData.data?.pages || [];
-    expect(pages.length).toBeGreaterThan(0);
+
+    // Set a page with extra_fields
+    await page.request.put(
+      `${BASE_URL}/api/projects/${projectId}/pages/${pages[0].page_id}/description`,
+      {
+        data: {
+          description_content: {
+            text: '测试内容',
+            extra_fields: { '排版建议': '居中布局' },
+          },
+        },
+      }
+    );
+
+    await page.goto(`${BASE_URL}/project/${projectId}/detail`);
+    await page.waitForLoadState('networkidle');
+
+    // Click edit on first card
+    const editBtn = page.locator('button').filter({ hasText: /编辑|Edit/ }).first();
+    await editBtn.click();
+
+    // Modal should be visible with extra field input
+    await expect(page.locator('label').filter({ hasText: '排版建议' })).toBeVisible({ timeout: 5000 });
+    const fieldTextarea = page.locator('textarea').filter({ hasText: '居中布局' });
+    await expect(fieldTextarea).toBeVisible();
+
+    // Edit the extra field value
+    await fieldTextarea.fill('左右分栏');
+
+    // Save
+    const saveBtn = page.locator('button').filter({ hasText: /保存|Save/ });
+    await saveBtn.click();
+
+    // Verify the card shows updated value
+    await expect(page.locator('text=左右分栏')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('single page regeneration should still work', async ({ page }) => {
+    const projectId = await createProjectWithOutline(page, 'Test single page regen');
 
     await page.goto(`${BASE_URL}/project/${projectId}/detail`);
     await page.waitForLoadState('networkidle');
 
     // Click regenerate on the first page card
     const regenBtn = page.locator('button').filter({ hasText: /重新生成|Regenerate/ });
-    // This button should exist
     await expect(regenBtn.first()).toBeVisible({ timeout: 5000 });
   });
 });

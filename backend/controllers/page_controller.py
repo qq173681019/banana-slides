@@ -201,7 +201,7 @@ def update_page_description(project_id, page_id):
         "description_content": {
             "title": "...",
             "text_content": ["...", "..."],
-            "layout_suggestion": "..."
+            "extra_fields": {"排版建议": "..."}
         }
     }
     """
@@ -300,13 +300,13 @@ def generate_page_description(project_id, page_id):
             detail_level=detail_level
         )
 
-        # Save description (generate_page_description returns dict with text + optional layout_suggestion)
+        # Save description (generate_page_description returns dict with text + optional extra_fields)
         desc_content = {
             "text": desc_result['text'],
             "generated_at": datetime.utcnow().isoformat()
         }
-        if desc_result.get('layout_suggestion'):
-            desc_content['layout_suggestion'] = desc_result['layout_suggestion']
+        if desc_result.get('extra_fields'):
+            desc_content['extra_fields'] = desc_result['extra_fields']
         
         page.set_description_content(desc_content)
         page.status = 'DESCRIPTION_GENERATED'

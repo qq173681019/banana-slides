@@ -362,7 +362,8 @@ def get_page_description_prompt(project_context: 'ProjectContext', outline: list
                                 page_outline: dict, page_index: int,
                                 part_info: str = "",
                                 language: str = None,
-                                detail_level: str = "default") -> str:
+                                detail_level: str = "default",
+                                extra_fields: list = None) -> str:
     """
     生成单个页面描述的 prompt
 
@@ -420,8 +421,7 @@ def get_page_description_prompt(project_context: 'ProjectContext', outline: list
 
 图片素材:
 [如果文件中存在图片请积极添加； 否则忽略图片素材字段]
-
-排版建议：[简要描述页面的结构布局，如"左文右图"、"居中布局"、"上下分栏"等，不包含颜色/字体/风格信息]
+{''.join(chr(10) + f'{f}：[关于{f}的建议]' for f in (extra_fields or []))}
 
 ## 关于图片
 如果参考文件中包含以 /files/ 开头的本地文件URL图片（例如 /files/mineru/xxx/image.png），请将这些图片以markdown格式输出，例如：![图片描述](/files/mineru/xxx/image.png)。这些图片会被包含在PPT页面中。
@@ -437,7 +437,8 @@ def get_all_descriptions_stream_prompt(project_context: 'ProjectContext',
                                        outline: list,
                                        flat_pages: list,
                                        language: str = None,
-                                       detail_level: str = "default") -> str:
+                                       detail_level: str = "default",
+                                       extra_fields: list = None) -> str:
     """
     一次性生成所有页面描述的 prompt（用于流式生成）
 
@@ -499,8 +500,7 @@ def get_all_descriptions_stream_prompt(project_context: 'ProjectContext',
 
 图片素材：
 [如果参考文件中存在图片请积极添加；否则忽略此字段]
-
-排版建议：[简要描述页面的结构布局，如"左文右图"、"居中布局"、"上下分栏"等，不包含颜色/字体/风格信息]
+{''.join(chr(10) + f'{f}：[关于{f}的建议]' for f in (extra_fields or []))}
 <!-- PAGE_END -->
 ```
 

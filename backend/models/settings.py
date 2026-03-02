@@ -36,6 +36,9 @@ class Settings(db.Model):
     # 描述生成模式: streaming / parallel (NULL=默认 streaming)
     description_generation_mode = db.Column(db.String(20), nullable=True)
 
+    # 描述额外字段配置: JSON 数组如 ["排版建议", "配图建议"] (NULL=默认 ["排版建议"])
+    description_extra_fields = db.Column(db.Text, nullable=True)
+
     # 百度 API 配置
     baidu_api_key = db.Column(db.String(500), nullable=True)  # 百度 API Key
 
@@ -60,6 +63,17 @@ class Settings(db.Model):
         """Return DB value, falling back to .env default when None."""
         v = getattr(self, attr)
         return v if v is not None else defaults.get(attr)
+
+    def get_description_extra_fields(self):
+        """Return parsed extra fields list, defaulting to ['排版建议']."""
+        if self.description_extra_fields:
+            try:
+                fields = json.loads(self.description_extra_fields)
+                if isinstance(fields, list):
+                    return fields
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return ['排版建议']
 
     def to_dict(self):
         """Convert to dictionary, merging .env defaults for None fields."""
@@ -86,6 +100,7 @@ class Settings(db.Model):
             'image_caption_model': self._val('image_caption_model', d),
             'output_language': self._val('output_language', d),
             'description_generation_mode': self._val('description_generation_mode', d) or 'streaming',
+            'description_extra_fields': self.get_description_extra_fields(),
             'enable_text_reasoning': self.enable_text_reasoning,
             'text_thinking_budget': self.text_thinking_budget,
             'enable_image_reasoning': self.enable_image_reasoning,

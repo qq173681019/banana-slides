@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { Edit2, FileText, RefreshCw, Layout } from 'lucide-react';
+import { Edit2, FileText, RefreshCw, Tag } from 'lucide-react';
 import { useT } from '@/hooks/useT';
 import { useImagePaste } from '@/hooks/useImagePaste';
 import { Card, ContextualStatusBadge, Button, Modal, Skeleton, Markdown } from '@/components/shared';
@@ -17,8 +17,7 @@ const descriptionCardI18n = {
       uploadingImage: "正在上传图片...",
       descriptionPlaceholder: "输入页面描述, 可包含页面文字、素材、排版设计等信息，支持粘贴图片",
       coverPage: "封面",
-      coverPageTooltip: "第一页为封面页，默认保持简洁风格",
-      layoutSuggestion: "排版建议"
+      coverPageTooltip: "第一页为封面页，默认保持简洁风格"
     }
   },
   en: {
@@ -29,8 +28,7 @@ const descriptionCardI18n = {
       uploadingImage: "Uploading image...",
       descriptionPlaceholder: "Enter page description, can include page text, materials, layout design, etc., support pasting images",
       coverPage: "Cover",
-      coverPageTooltip: "This is the cover page, default to keep simple style",
-      layoutSuggestion: "Layout Suggestion"
+      coverPageTooltip: "This is the cover page, default to keep simple style"
     }
   }
 };
@@ -39,6 +37,7 @@ export interface DescriptionCardProps {
   page: Page;
   index: number;
   projectId?: string;
+  extraFieldNames?: string[];
   showToast: (props: { message: string; type: 'success' | 'error' | 'info' | 'warning' }) => void;
   onUpdate: (data: Partial<Page>) => void;
   onRegenerate: () => void;
@@ -56,15 +55,26 @@ const getDescriptionText = (descContent: DescriptionContent | undefined): string
   return '';
 };
 
-const getLayoutSuggestion = (descContent: DescriptionContent | undefined): string | undefined => {
-  if (!descContent) return undefined;
-  return descContent.layout_suggestion;
+// 提取 extra_fields，向后兼容 layout_suggestion
+const getExtraFields = (descContent: DescriptionContent | undefined): Record<string, string> => {
+  if (!descContent) return {};
+  if (descContent.extra_fields) return descContent.extra_fields;
+  // 向后兼容：旧数据只有 layout_suggestion
+  if (descContent.layout_suggestion) return { '排版建议': descContent.layout_suggestion };
+  return {};
+};
+
+// 用于 memo 比较的序列化 key
+const getExtraFieldsKey = (descContent: DescriptionContent | undefined): string => {
+  const fields = getExtraFields(descContent);
+  return JSON.stringify(fields);
 };
 
 export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
   page,
   index,
   projectId,
+  extraFieldNames = [],
   showToast,
   onUpdate,
   onRegenerate,
@@ -73,10 +83,11 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
   const t = useT(descriptionCardI18n);
 
   const text = getDescriptionText(page.description_content);
-  const layoutSuggestion = getLayoutSuggestion(page.description_content);
+  const extraFields = getExtraFields(page.description_content);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
+  const [editExtraFields, setEditExtraFields] = useState<Record<string, string>>({});
   const textareaRef = useRef<MarkdownTextareaRef>(null);
 
   // Callback to insert at cursor position in the textarea
@@ -97,19 +108,31 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
   const handleEdit = () => {
     // 在打开编辑对话框时，从当前的 page 获取最新值
     const currentText = getDescriptionText(page.description_content);
+    const currentExtraFields = getExtraFields(page.description_content);
     setEditContent(currentText);
+    setEditExtraFields({ ...currentExtraFields });
     setIsEditing(true);
   };
 
   const handleSave = () => {
-    // 保存时使用 text 格式（后端期望的格式）
+    // 保存时包含 text 和 extra_fields
+    const filteredFields: Record<string, string> = {};
+    for (const [key, value] of Object.entries(editExtraFields)) {
+      if (value.trim()) {
+        filteredFields[key] = value;
+      }
+    }
     onUpdate({
       description_content: {
         text: editContent,
+        ...(Object.keys(filteredFields).length > 0 ? { extra_fields: filteredFields } : {}),
       } as DescriptionContent,
     });
     setIsEditing(false);
   };
+
+  // 合并已有和配置中的字段名（按配置顺序，附加已有但不在配置中的）
+  const allFieldNames = [...new Set([...extraFieldNames, ...Object.keys(extraFields)])];
 
   return (
     <>
@@ -151,15 +174,19 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
           ) : text ? (
             <div className="text-sm text-gray-700 dark:text-foreground-secondary">
               <Markdown>{text}</Markdown>
-              {layoutSuggestion && (
-                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-border-primary">
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-foreground-tertiary mb-1">
-                    <Layout size={12} />
-                    <span className="font-medium">{t('descriptionCard.layoutSuggestion')}</span>
+              {allFieldNames.map(name => {
+                const value = extraFields[name];
+                if (!value) return null;
+                return (
+                  <div key={name} className="mt-3 pt-3 border-t border-gray-100 dark:border-border-primary">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-foreground-tertiary mb-1">
+                      <Tag size={12} />
+                      <span className="font-medium">{name}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-foreground-tertiary">{value}</p>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-foreground-tertiary">{layoutSuggestion}</p>
-                </div>
-              )}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-400 dark:text-foreground-tertiary">
@@ -210,6 +237,21 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
             rows={12}
             placeholder={t('descriptionCard.descriptionPlaceholder')}
           />
+          {/* 额外字段编辑 */}
+          {allFieldNames.map(name => (
+            <div key={name}>
+              <label className="block text-sm font-medium text-gray-700 dark:text-foreground-secondary mb-1">
+                {name}
+              </label>
+              <textarea
+                className="w-full rounded-md border border-gray-200 dark:border-border-primary bg-white dark:bg-background-primary px-3 py-2 text-sm text-gray-700 dark:text-foreground-secondary focus:outline-none focus:ring-2 focus:ring-banana-500/20 focus:border-banana-500 resize-none"
+                rows={2}
+                value={editExtraFields[name] || ''}
+                onChange={e => setEditExtraFields(prev => ({ ...prev, [name]: e.target.value }))}
+                placeholder={name}
+              />
+            </div>
+          ))}
           <div className="flex justify-end gap-3 pt-4">
             <Button variant="ghost" onClick={() => setIsEditing(false)}>
               {t('common.cancel')}
@@ -230,5 +272,6 @@ export const DescriptionCard: React.FC<DescriptionCardProps> = React.memo(({
   prev.page.status === next.page.status &&
   prev.page.part === next.page.part &&
   getDescriptionText(prev.page.description_content) === getDescriptionText(next.page.description_content) &&
-  getLayoutSuggestion(prev.page.description_content) === getLayoutSuggestion(next.page.description_content)
+  getExtraFieldsKey(prev.page.description_content) === getExtraFieldsKey(next.page.description_content) &&
+  JSON.stringify(prev.extraFieldNames) === JSON.stringify(next.extraFieldNames)
 );

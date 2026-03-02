@@ -15,13 +15,15 @@ export type DescriptionContent =
   | {
       // 格式1: 后端返回的纯文本格式
       text: string;
-      layout_suggestion?: string;
+      extra_fields?: Record<string, string>;
+      layout_suggestion?: string; // 向后兼容
     }
   | {
       // 格式2: 类型定义中的结构化格式
       title: string;
       text_content: string[];
-      layout_suggestion?: string;
+      extra_fields?: Record<string, string>;
+      layout_suggestion?: string; // 向后兼容
     };
 
 // 图片版本
@@ -141,6 +143,8 @@ export interface Settings {
   output_language: 'zh' | 'en' | 'ja' | 'auto';
   // 描述生成模式
   description_generation_mode: 'streaming' | 'parallel';
+  // 描述额外字段
+  description_extra_fields?: string[];
   // 推理模式配置（分别控制文本和图像）
   enable_text_reasoning: boolean;
   text_thinking_budget: number;

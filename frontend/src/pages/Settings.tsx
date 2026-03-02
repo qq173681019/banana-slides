@@ -435,16 +435,6 @@ export const Settings: React.FC = () => {
       icon: <Zap size={20} />,
       fields: [
         {
-          key: 'description_generation_mode',
-          label: t('settings.fields.descriptionGenerationMode'),
-          type: 'buttons',
-          description: t('settings.fields.descriptionGenerationModeDesc'),
-          options: [
-            { value: 'streaming', label: t('settings.fields.descriptionGenerationModeStreaming') },
-            { value: 'parallel', label: t('settings.fields.descriptionGenerationModeParallel') },
-          ],
-        },
-        {
           key: 'max_description_workers',
           label: t('settings.fields.maxDescriptionWorkers'),
           type: 'number',

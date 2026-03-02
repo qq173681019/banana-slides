@@ -758,7 +758,7 @@ const debouncedUpdatePage = debounce(
                     status: 'DESCRIPTION_GENERATED' as const,
                     description_content: {
                       text: desc.text,
-                      ...(desc.layout_suggestion ? { layout_suggestion: desc.layout_suggestion } : {}),
+                      ...(desc.extra_fields ? { extra_fields: desc.extra_fields } : {}),
                     },
                   };
                 }
