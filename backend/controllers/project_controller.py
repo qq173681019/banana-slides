@@ -496,6 +496,14 @@ def generate_outline(project_id):
             'pages': [page.to_dict() for page in pages_list]
         })
     
+    except ValueError as e:
+        db.session.rollback()
+        error_msg = str(e)
+        logger.warning(f"generate_outline configuration error: {error_msg}")
+        # API key not configured or similar configuration error
+        if 'api_key' in error_msg.lower() or ('key' in error_msg.lower() and 'required' in error_msg.lower()):
+            return error_response('API_KEY_NOT_CONFIGURED', 'API Key 未配置，请先在设置页面配置 API Key 后再生成。', 400)
+        return error_response('CONFIGURATION_ERROR', error_msg, 400)
     except Exception as e:
         db.session.rollback()
         logger.error(f"generate_outline failed: {str(e)}", exc_info=True)
@@ -593,7 +601,13 @@ def generate_outline_stream(project_id):
                 except Exception as rollback_exc:
                     logger.warning(f"Session rollback failed: {rollback_exc}", exc_info=True)
                 logger.error(f"generate_outline_stream failed: {str(e)}", exc_info=True)
-                yield _sse_event('error', {'message': '生成过程中发生内部错误'})
+                error_msg = str(e)
+                # Provide user-friendly messages for common errors
+                if 'api_key' in error_msg.lower() or 'google_api_key' in error_msg.lower() or ('key' in error_msg.lower() and 'required' in error_msg.lower()):
+                    error_msg = 'API Key 未配置，请先在设置页面配置 API Key 后再生成。'
+                elif 'openai_api_key' in error_msg.lower():
+                    error_msg = 'OpenAI API Key 未配置，请先在设置页面配置后再生成。'
+                yield _sse_event('error', {'message': error_msg})
 
     return Response(
         stream_with_context(sse_generate()),
@@ -724,8 +738,11 @@ def generate_from_description(project_id):
     
     except Exception as e:
         db.session.rollback()
-        logger.error(f"generate_from_description failed: {str(e)}", exc_info=True)
-        return error_response('AI_SERVICE_ERROR', str(e), 503)
+        error_msg = str(e)
+        logger.error(f"generate_from_description failed: {error_msg}", exc_info=True)
+        if isinstance(e, ValueError) and ('api_key' in error_msg.lower() or ('key' in error_msg.lower() and 'required' in error_msg.lower())):
+            return error_response('API_KEY_NOT_CONFIGURED', 'API Key 未配置，请先在设置页面配置 API Key 后再生成。', 400)
+        return error_response('AI_SERVICE_ERROR', error_msg, 503)
 
 
 @project_bp.route('/<project_id>/generate/descriptions', methods=['POST'])

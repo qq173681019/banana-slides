@@ -124,6 +124,15 @@ export function normalizeErrorMessage(errorMessage: string | null | undefined): 
     return isZh
       ? '该页面已经有图片，如需重新生成，请在生成时选择"重新生成"或稍后重试。'
       : 'Image already exists. Choose "Regenerate" to create a new one.';
+  } else if (
+    message.includes('api key') || message.includes('api_key') ||
+    message.includes('google_api_key') || message.includes('openai_api_key') ||
+    (message.includes('key') && message.includes('required')) ||
+    message.includes('api key 未配置') || message.includes('未配置')
+  ) {
+    return isZh
+      ? 'API Key 未配置，请前往设置页面配置 API Key 和 API Base URL 后再重试。'
+      : 'API Key is not configured. Please go to Settings to configure your API Key and Base URL.';
   }
 
   // Handle HTTP error codes
