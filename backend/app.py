@@ -21,7 +21,7 @@ load_dotenv(dotenv_path=_env_file, override=True)
 from flask import Flask
 from flask_cors import CORS
 from models import db
-from config import Config
+from config import Config, validate_google_api_key
 from controllers.material_controller import material_bp, material_global_bp
 from controllers.reference_file_controller import reference_file_bp
 from controllers.settings_controller import settings_bp
@@ -116,6 +116,10 @@ def create_app():
     with app.app_context():
         # Load settings from database and sync to app.config
         _load_settings_to_config(app)
+
+        # Warn early if the Google API key looks invalid (wrong length / placeholder)
+        if app.config.get('AI_PROVIDER_FORMAT', 'gemini') == 'gemini':
+            validate_google_api_key(app.config.get('GOOGLE_API_KEY', ''))
 
     # Access code enforcement on all /api/ routes
     @app.before_request

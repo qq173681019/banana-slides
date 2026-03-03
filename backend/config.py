@@ -1,9 +1,51 @@
 """
 Backend configuration file
 """
+import logging
 import os
+import re
 import sys
 from datetime import timedelta
+
+logger = logging.getLogger(__name__)
+
+# Regex for a well-formed Google AI Studio API key: "AIzaSy" + 33 base64url chars
+_GOOGLE_KEY_RE = re.compile(r'^AIzaSy[A-Za-z0-9_-]{33}$')
+
+
+def validate_google_api_key(api_key: str) -> None:
+    """Log a warning when *api_key* does not look like a valid Google AI Studio key.
+
+    A genuine key produced by Google AI Studio always starts with ``AIzaSy``
+    and is exactly 39 characters long (6-char prefix + 33 random base64url
+    characters).  Anything else — wrong length, sequential characters, or a
+    placeholder — will be flagged so the user can fix the configuration before
+    encountering a cryptic authentication error at request time.
+
+    This function only logs; it never raises.
+    """
+    if not api_key or api_key in ('your-api-key-here', 'your-api-key'):
+        logger.warning(
+            "GOOGLE_API_KEY is not set. "
+            "Please configure it in your .env file or via the settings panel."
+        )
+        return
+
+    if not _GOOGLE_KEY_RE.match(api_key):
+        length = len(api_key)
+        if not api_key.startswith('AIzaSy'):
+            hint = "does not start with 'AIzaSy'"
+        elif length != 39:
+            hint = f"is {length} characters long (expected 39)"
+        else:
+            hint = "contains invalid characters"
+        logger.warning(
+            "GOOGLE_API_KEY appears to be invalid (%s). "
+            "A valid Google AI Studio key starts with 'AIzaSy' and is exactly "
+            "39 characters long. Please obtain a real key from "
+            "https://aistudio.google.com/app/apikey and update your .env file.",
+            hint,
+        )
 
 # 基础配置 - 使用更可靠的路径计算方式
 # 在模块加载时立即计算并固定路径

@@ -80,6 +80,35 @@ class TestProjectGet:
         assert response.status_code in [400, 404]
 
 
+class TestGenerateOutlineAPIKeyError:
+    """测试大纲生成时 API Key 未配置的错误处理"""
+
+    def test_generate_outline_no_api_key_returns_400(self, client, app):
+        """当 API Key 未配置时，大纲生成应返回 400 错误，而非 503"""
+        from unittest.mock import patch
+
+        # 创建一个 outline 类型的项目
+        create_response = client.post('/api/projects', json={
+            'creation_type': 'outline',
+            'outline_text': '## 第一页\n- 要点1\n## 第二页\n- 要点2'
+        })
+        assert create_response.status_code == 201
+        project_id = create_response.get_json()['data']['project_id']
+
+        # 模拟 API Key 未配置的 ValueError
+        with patch('controllers.project_controller.get_ai_service') as mock_get_ai:
+            mock_get_ai.side_effect = ValueError(
+                "GOOGLE_API_KEY (from database settings or environment) is required"
+            )
+            response = client.post(f'/api/projects/{project_id}/generate/outline', json={})
+
+        # 应该返回 400（配置错误），而非 503（服务不可用）
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['success'] is False
+        assert data['error']['code'] == 'API_KEY_NOT_CONFIGURED'
+
+
 class TestProjectUpdate:
     """项目更新测试"""
     

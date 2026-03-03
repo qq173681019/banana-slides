@@ -289,7 +289,11 @@ def generate_descriptions_task(task_id: str, project_id: str, ai_service,
             task = Task.query.get(task_id)
             if task:
                 task.status = 'FAILED'
-                task.error_message = str(e)
+                error_msg = str(e)
+                # Provide user-friendly messages for common configuration errors
+                if isinstance(e, ValueError) and ('api_key' in error_msg.lower() or ('key' in error_msg.lower() and 'required' in error_msg.lower())):
+                    error_msg = 'API Key 未配置，请先在设置页面配置 API Key 后再生成。'
+                task.error_message = error_msg
                 task.completed_at = datetime.utcnow()
                 db.session.commit()
 
@@ -512,7 +516,11 @@ def generate_images_task(task_id: str, project_id: str, ai_service, file_service
             task = Task.query.get(task_id)
             if task:
                 task.status = 'FAILED'
-                task.error_message = str(e)
+                error_msg = str(e)
+                # Provide user-friendly messages for common configuration errors
+                if isinstance(e, ValueError) and ('api_key' in error_msg.lower() or ('key' in error_msg.lower() and 'required' in error_msg.lower())):
+                    error_msg = 'API Key 未配置，请先在设置页面配置 API Key 后再生成。'
+                task.error_message = error_msg
                 task.completed_at = datetime.utcnow()
                 db.session.commit()
 
