@@ -31,21 +31,15 @@ if not exist ".env" (
 
 REM -----------------------------------------------
 REM 2. 读取端口配置（从 .env 中读取，默认 5000 / 3000）
+REM    使用 PowerShell 解析，正确处理行内注释和空白
 REM -----------------------------------------------
-set "BACKEND_PORT=5000"
-set "FRONTEND_PORT=3000"
-for /f "usebackq tokens=1,* delims==" %%A in (".env") do (
-    set "line=%%A"
-    if "!line:~0,1!" neq "#" (
-        if "%%A"=="BACKEND_PORT"  set "BACKEND_PORT=%%B"
-        if "%%A"=="FRONTEND_PORT" set "FRONTEND_PORT=%%B"
-    )
-)
-REM 去掉空白
-set "BACKEND_PORT=!BACKEND_PORT: =!"
-set "FRONTEND_PORT=!FRONTEND_PORT: =!"
+for /f "delims=" %%P in ('powershell -NoProfile -Command "& { $e = Get-Content '.env' | Where-Object { $_ -match '^BACKEND_PORT\s*=' -and $_ -notmatch '^\s*#' }; if ($e) { ($e -split '=',2)[1] -replace '#.*$','' -replace '\s','' } else { '5000' } }"') do set "BACKEND_PORT=%%P"
+for /f "delims=" %%P in ('powershell -NoProfile -Command "& { $e = Get-Content '.env' | Where-Object { $_ -match '^FRONTEND_PORT\s*=' -and $_ -notmatch '^\s*#' }; if ($e) { ($e -split '=',2)[1] -replace '#.*$','' -replace '\s','' } else { '3000' } }"') do set "FRONTEND_PORT=%%P"
 
-echo [2/4] 端口配置：后端=%BACKEND_PORT%  前端=%FRONTEND_PORT% ✓
+if "!BACKEND_PORT!"=="" set "BACKEND_PORT=5000"
+if "!FRONTEND_PORT!"=="" set "FRONTEND_PORT=3000"
+
+echo [2/4] 端口配置：后端=!BACKEND_PORT!  前端=!FRONTEND_PORT! ✓
 echo.
 
 REM -----------------------------------------------
@@ -99,38 +93,54 @@ echo.
 
 REM --- 启动后端 ---
 echo  ► 正在启动后端服务（新窗口）...
-if "%USE_UV%"=="1" (
-    REM 使用 uv：在项目根目录运行，自动管理虚拟环境
-    start "🍌 Banana Slides - 后端 (:%BACKEND_PORT%)" cmd /k "title 🍌 Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: %BACKEND_PORT% && echo. && cd /d "%~dp0backend" && uv run alembic upgrade head 2>nul & uv run python app.py"
+if "!USE_UV!"=="1" (
+    REM 使用 uv：先执行数据库迁移（成功后再启动 Flask）
+    start "Banana Slides 后端" cmd /k "title Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: !BACKEND_PORT! && echo. && cd /d "%~dp0backend" && uv run alembic upgrade head && uv run python app.py"
 ) else (
-    REM 使用 pip + venv 作为备用方案
-    start "🍌 Banana Slides - 后端 (:%BACKEND_PORT%)" cmd /k "title 🍌 Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: %BACKEND_PORT% && echo. && cd /d "%~dp0backend" && (if not exist venv python -m venv venv) && call venv\Scripts\activate.bat && pip install -q -r requirements.txt 2>nul & python app.py"
+    REM 使用 pip + venv 作为备用方案（含数据库迁移）
+    start "Banana Slides 后端" cmd /k "title Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: !BACKEND_PORT! && echo. && cd /d "%~dp0backend" && (if not exist venv python -m venv venv) && call venv\Scripts\activate.bat && pip install -q -e "%~dp0." && python -m alembic upgrade head && python app.py"
 )
 
-REM 等待后端初始化（给 Flask 约 3 秒启动时间）
-echo     等待后端初始化 (3 秒)...
-timeout /t 3 /nobreak >nul
+REM --- 等待后端就绪（轮询 /health 接口，最多等 60 秒）---
+echo     等待后端就绪...
+set /a WAIT_COUNT=0
+:wait_backend
+powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://localhost:!BACKEND_PORT!/health' -UseBasicParsing -TimeoutSec 2).StatusCode } catch { 0 }" 2>nul | findstr /C:"200" >nul 2>&1
+if not errorlevel 1 goto backend_ready
+set /a WAIT_COUNT+=1
+if !WAIT_COUNT! GEQ 30 goto backend_ready
+timeout /t 2 /nobreak >nul
+goto wait_backend
+:backend_ready
 
 REM --- 启动前端 ---
 echo  ► 正在启动前端服务（新窗口）...
-start "🍌 Banana Slides - 前端 (:%FRONTEND_PORT%)" cmd /k "title 🍌 Banana Slides 前端服务 && echo. && echo  前端服务正在启动，请稍候... && echo  端口: %FRONTEND_PORT% && echo. && cd /d "%~dp0frontend" && (if not exist node_modules npm install) && npm run dev"
+start "Banana Slides 前端" cmd /k "title Banana Slides 前端服务 && echo. && echo  前端服务正在启动，请稍候... && echo  端口: !FRONTEND_PORT! && echo. && cd /d "%~dp0frontend" && (if not exist node_modules npm install) && npm run dev"
 
-REM 等待前端 Vite 启动（约 5 秒）
-echo     等待前端启动 (5 秒)...
-timeout /t 5 /nobreak >nul
+REM --- 等待前端 Vite 就绪（轮询端口，最多等 60 秒）---
+echo     等待前端就绪...
+set /a WAIT_COUNT=0
+:wait_frontend
+powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://localhost:!FRONTEND_PORT!' -UseBasicParsing -TimeoutSec 2).StatusCode } catch { 0 }" 2>nul | findstr /C:"200" >nul 2>&1
+if not errorlevel 1 goto frontend_ready
+set /a WAIT_COUNT+=1
+if !WAIT_COUNT! GEQ 30 goto frontend_ready
+timeout /t 2 /nobreak >nul
+goto wait_frontend
+:frontend_ready
 
 REM --- 打开浏览器 ---
 echo  ► 正在打开浏览器...
-start "" "http://localhost:%FRONTEND_PORT%"
+start "" "http://localhost:!FRONTEND_PORT!"
 
 echo.
 echo  ==========================================
 echo   ✅ Banana Slides 已启动！
 echo  ==========================================
 echo.
-echo   前端界面:  http://localhost:%FRONTEND_PORT%
-echo   后端接口:  http://localhost:%BACKEND_PORT%
-echo   健康检查:  http://localhost:%BACKEND_PORT%/health
+echo   前端界面:  http://localhost:!FRONTEND_PORT!
+echo   后端接口:  http://localhost:!BACKEND_PORT!
+echo   健康检查:  http://localhost:!BACKEND_PORT!/health
 echo.
 echo   ⚠️  关闭前请先在各服务窗口按 Ctrl+C 停止服务，
 echo       然后再关闭窗口，避免端口占用。
