@@ -92,13 +92,14 @@ echo [4/4] 启动服务...
 echo.
 
 REM --- 启动后端 ---
-echo  ► 正在启动后端服务（新窗口）...
+echo  [启动] 正在启动后端服务（新窗口）...
 if "!USE_UV!"=="1" (
     REM 使用 uv：先执行数据库迁移（成功后再启动 Flask）
-    start "Banana Slides 后端" cmd /k "title Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: !BACKEND_PORT! && echo. && cd /d "%~dp0backend" && uv run alembic upgrade head && uv run python app.py"
+    start "Banana Slides 后端" cmd /k "title Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: !BACKEND_PORT! && echo. && cd /d %~dp0backend && uv run alembic upgrade head && uv run python app.py || (echo. && echo [错误] 后端启动失败，请查看上方报错信息。 && echo. && pause)"
 ) else (
     REM 使用 pip + venv 作为备用方案（含数据库迁移）
-    start "Banana Slides 后端" cmd /k "title Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: !BACKEND_PORT! && echo. && cd /d "%~dp0backend" && (if not exist venv python -m venv venv) && call venv\Scripts\activate.bat && pip install -q -e "%~dp0." && python -m alembic upgrade head && python app.py"
+    REM 注意：此处不能用 (if ...) 括号写法，否则 cmd 解析器会误判括号层级导致脚本退出
+    start "Banana Slides 后端" cmd /k "title Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: !BACKEND_PORT! && echo. && cd /d %~dp0backend && if not exist venv python -m venv venv && call venv\Scripts\activate.bat && pip install -q -e %~dp0. && python -m alembic upgrade head && python app.py || (echo. && echo [错误] 后端启动失败，请查看上方报错信息。 && echo. && pause)"
 )
 
 REM --- 等待后端就绪（轮询 /health 接口，最多等 60 秒）---
@@ -112,10 +113,15 @@ if !WAIT_COUNT! GEQ 30 goto backend_ready
 timeout /t 2 /nobreak >nul
 goto wait_backend
 :backend_ready
+if !WAIT_COUNT! GEQ 30 (
+    echo.
+    echo  [!] 后端未在 60 秒内就绪，请检查「Banana Slides 后端」窗口中的错误信息。
+    echo.
+)
 
 REM --- 启动前端 ---
-echo  ► 正在启动前端服务（新窗口）...
-start "Banana Slides 前端" cmd /k "title Banana Slides 前端服务 && echo. && echo  前端服务正在启动，请稍候... && echo  端口: !FRONTEND_PORT! && echo. && cd /d "%~dp0frontend" && (if not exist node_modules npm install) && npm run dev"
+echo  [启动] 正在启动前端服务（新窗口）...
+start "Banana Slides 前端" cmd /k "title Banana Slides 前端服务 && echo. && echo  前端服务正在启动，请稍候... && echo  端口: !FRONTEND_PORT! && echo. && cd /d %~dp0frontend && if not exist node_modules npm install && npm run dev || (echo. && echo [错误] 前端启动失败，请查看上方报错信息。 && echo. && pause)"
 
 REM --- 等待前端 Vite 就绪（轮询端口，最多等 60 秒）---
 echo     等待前端就绪...
@@ -128,23 +134,32 @@ if !WAIT_COUNT! GEQ 30 goto frontend_ready
 timeout /t 2 /nobreak >nul
 goto wait_frontend
 :frontend_ready
+if !WAIT_COUNT! GEQ 30 (
+    echo.
+    echo  [!] 前端未在 60 秒内就绪，请检查「Banana Slides 前端」窗口中的错误信息。
+    echo.
+)
 
 REM --- 打开浏览器 ---
-echo  ► 正在打开浏览器...
+echo  [启动] 正在打开浏览器...
 start "" "http://localhost:!FRONTEND_PORT!"
 
 echo.
 echo  ==========================================
-echo   ✅ Banana Slides 已启动！
+echo   Banana Slides 已启动！
 echo  ==========================================
 echo.
 echo   前端界面:  http://localhost:!FRONTEND_PORT!
 echo   后端接口:  http://localhost:!BACKEND_PORT!
 echo   健康检查:  http://localhost:!BACKEND_PORT!/health
 echo.
-echo   ⚠️  关闭前请先在各服务窗口按 Ctrl+C 停止服务，
-echo       然后再关闭窗口，避免端口占用。
+echo   如果网页没有自动打开，请手动在浏览器中访问上方地址。
+echo   如遇错误，请查看「后端服务」和「前端服务」两个黑色窗口中的报错信息。
+echo.
+echo   关闭前请先在各服务窗口按 Ctrl+C 停止服务，
+echo   然后再关闭窗口，避免端口占用。
 echo.
 echo   如需停止所有服务，关闭后端和前端的黑色窗口即可。
 echo.
-pause
+echo   按任意键关闭此窗口（服务将继续在各自窗口中运行）...
+pause >nul
