@@ -59,6 +59,7 @@ const settingsI18n = {
         applyLink: "，请点击此处申请",
         textModelSource: "文本模型提供商格式", textModelSourceDesc: "选择文本生成使用的提供商格式", textModelSourcePlaceholder: "-- 请选择 --",
         imageModelSource: "图片模型提供商格式", imageModelSourceDesc: "选择图片生成使用的提供商格式", imageModelSourcePlaceholder: "-- 请选择 --",
+        imageModelSourceNoImageGenWarning: "⚠️ {{vendor}} 不支持图片生成，请改为选择 Qwen、Doubao 或 SiliconFlow。",
         imageCaptionModelSource: "图片识别模型提供商格式", imageCaptionModelSourceDesc: "选择图片识别使用的提供商格式", imageCaptionModelSourcePlaceholder: "-- 请选择 --",
         vendorApiKey: "{{vendor}} API Key", vendorApiKeyPlaceholder: "输入 {{vendor}} API Key",
         vendorApiKeyDesc: "留空则保持当前设置不变，输入新值则更新",
@@ -162,6 +163,7 @@ const settingsI18n = {
         applyLink: ", click here to apply",
         textModelSource: "Text Model Provider Format", textModelSourceDesc: "Select the provider format for text generation", textModelSourcePlaceholder: "-- Select --",
         imageModelSource: "Image Model Provider Format", imageModelSourceDesc: "Select the provider format for image generation", imageModelSourcePlaceholder: "-- Select --",
+        imageModelSourceNoImageGenWarning: "⚠️ {{vendor}} does not support image generation. Please choose Qwen, Doubao, or SiliconFlow instead.",
         imageCaptionModelSource: "Image Caption Model Provider Format", imageCaptionModelSourceDesc: "Select the provider format for image captioning", imageCaptionModelSourcePlaceholder: "-- Select --",
         vendorApiKey: "{{vendor}} API Key", vendorApiKeyPlaceholder: "Enter {{vendor}} API Key",
         vendorApiKeyDesc: "Leave empty to keep current setting, enter new value to update",
@@ -282,6 +284,9 @@ const GLOBAL_PROVIDER_FORMATS = [
 
 // LazyLLM 厂商名集合
 const LAZYLLM_VENDOR_SET = new Set(LAZYLLM_SOURCES.map(s => s.value));
+
+// LazyLLM 厂商中不支持图片生成的厂商集合
+const NO_IMAGE_GEN_VENDORS = new Set(['deepseek', 'glm', 'minimax', 'sensenova']);
 
 // 初始表单数据
 const initialFormData = {
@@ -975,6 +980,14 @@ export const Settings: React.FC = () => {
           <p className="mt-1 text-sm text-gray-500 dark:text-foreground-tertiary">
             {t('settings.fields.modelProviderDesc')}
           </p>
+          {/* 图片生成不支持的厂商警告 */}
+          {item.sourceKey === 'image_model_source' && NO_IMAGE_GEN_VENDORS.has(sourceValue) && (
+            <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+              {t('settings.fields.imageModelSourceNoImageGenWarning', {
+                vendor: LAZYLLM_SOURCES.find(s => s.value === sourceValue)?.label || sourceValue,
+              })}
+            </p>
+          )}
         </div>
 
         {/* Gemini/OpenAI 提供商：显示 API Base URL + API Key */}

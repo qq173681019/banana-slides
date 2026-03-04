@@ -49,13 +49,46 @@ GOOGLE_APPLICATION_CREDENTIALS=./gcp-service-account.json
 
 ## LazyLLM（多厂商路由）
 
-将请求路由到不同国产 AI 厂商：
+将请求路由到不同国产 AI 厂商，可混合使用，例如文本用 DeepSeek、图片用 Qwen。
+
+**各厂商能力一览：**
+
+| 厂商 | 文本 (`TEXT_MODEL_SOURCE`) | 图片生成 (`IMAGE_MODEL_SOURCE`) | 图片描述 (`IMAGE_CAPTION_MODEL_SOURCE`) |
+|------|:--------------------------:|:--------------------------------:|:----------------------------------------:|
+| `qwen`（通义千问） | ✅ | ✅ | ✅ |
+| `doubao`（火山引擎/豆包） | ✅ | ✅ | ✅ |
+| `deepseek` | ✅ | ❌ | ❌ |
+| `glm`（智谱） | ✅ | ❌ | ✅ |
+| `siliconflow`（硅基流动） | ✅ | ✅ | ✅ |
+| `minimax` | ✅ | ❌ | ✅ |
+| `sensenova`（商汤） | ✅ | ❌ | ✅ |
+
+<Warning>
+  `deepseek` 和 `glm` **不支持**图片生成，请勿将其设为 `IMAGE_MODEL_SOURCE`。
+  图片生成请使用 `qwen`、`doubao` 或 `siliconflow`。
+</Warning>
+
+**示例 — 仅用 DeepSeek + Qwen + GLM（无需 Google API）：**
 
 ```env
 AI_PROVIDER_FORMAT=lazyllm
+
+# 文本生成：使用 DeepSeek（也可改为 qwen 或 glm）
 TEXT_MODEL_SOURCE=deepseek
-IMAGE_MODEL_SOURCE=doubao
+TEXT_MODEL=deepseek-v3
+
+# 图片生成：必须用 qwen（deepseek 和 glm 不支持图片生成）
+IMAGE_MODEL_SOURCE=qwen
+IMAGE_MODEL=qwen-image-edit-plus
+
+# 图片描述（解析参考文件中的图片）：可用 Qwen 或 GLM 视觉模型
 IMAGE_CAPTION_MODEL_SOURCE=qwen
+IMAGE_CAPTION_MODEL=qwen-vl-max
+
+# API Key（只需配置实际使用的厂商）
+DEEPSEEK_API_KEY=your-deepseek-key
+QWEN_API_KEY=your-qwen-key
+GLM_API_KEY=your-glm-key   # 可选，如上方选用 glm 时填写
 ```
 
 设置对应厂商的 API Key：
