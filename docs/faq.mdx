@@ -3,6 +3,39 @@ title: "FAQ"
 description: "Frequently asked questions"
 ---
 
+## How do I verify my API key is working?
+
+Run the built-in verification script on your local machine (no extra dependencies needed):
+
+```bash
+# Auto-detect all vendor keys from your .env and test them
+python scripts/check_api_keys.py
+
+# Test a specific vendor and key directly
+python scripts/check_api_keys.py --vendor qwen --key sk-YOUR_KEY_HERE
+
+# Test a specific vendor using .env
+python scripts/check_api_keys.py --vendor deepseek
+```
+
+The script will call each vendor's API and report whether the key is valid:
+
+```
+==============================
+  Banana Slides — API Key Checker
+==============================
+
+[ 通义千问 (Alibaba Qwen) ]
+  Key   : sk-7ad9****113d
+  Testing... OK ✅  Model reply: "OK"
+
+[ DeepSeek ]
+  Key   : sk-abc0****ef12
+  Testing... Auth failed ❌  HTTP 401 → API key is invalid or expired
+```
+
+Alternatively, after deploying the service, use the **Service Test** buttons at the bottom of the Settings page in the web UI — they test your configured keys end-to-end through the backend.
+
 ## Does the project require Google API? Can I use DeepSeek, Qwen, or GLM instead?
 
 No — Google API is **not required**. Set `AI_PROVIDER_FORMAT=lazyllm` in `.env` to use Chinese AI vendors directly without any Google credentials.

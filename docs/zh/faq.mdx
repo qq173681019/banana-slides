@@ -3,6 +3,39 @@ title: "常见问题"
 description: "常见问题解答"
 ---
 
+## 如何验证我的 API Key 是否可用？
+
+在本地机器上运行内置验证脚本（无额外依赖）：
+
+```bash
+# 自动检测 .env 中所有厂商 Key 并逐一测试
+python scripts/check_api_keys.py
+
+# 直接测试指定厂商和 Key
+python scripts/check_api_keys.py --vendor qwen --key sk-YOUR_KEY_HERE
+
+# 测试 .env 中指定厂商的 Key
+python scripts/check_api_keys.py --vendor deepseek
+```
+
+脚本会调用各厂商 API 并报告结果：
+
+```
+==============================
+  Banana Slides — API Key Checker
+==============================
+
+[ 通义千问 (Alibaba Qwen) ]
+  Key   : sk-7ad9****113d
+  Testing... OK ✅  Model reply: "OK"
+
+[ DeepSeek ]
+  Key   : sk-abc0****ef12
+  Testing... Auth failed ❌  HTTP 401 → API key is invalid or expired
+```
+
+服务部署后，也可以在网页「**设置**」页面底部点击「**服务测试**」，通过后端端对端测试已配置的 Key。
+
 ## 这个项目一定要接 Google API 吗？可以用 DeepSeek、Qwen 或 GLM 替代吗？
 
 不需要 —— Google API **并非必须**。在 `.env` 中设置 `AI_PROVIDER_FORMAT=lazyllm`，即可直接使用国产大模型，完全无需 Google 凭证。
