@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, Key, Image, Zap, Save, RotateCcw, Globe, FileText, Brain, ArrowUp, HelpCircle } from 'lucide-react';
+import { Home, Key, Image, Zap, Save, RotateCcw, Globe, FileText, Brain, ArrowUp, HelpCircle, Moon, Sun, Monitor } from 'lucide-react';
 import { useT } from '@/hooks/useT';
+import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from 'react-i18next';
 
 // 组件内翻译
 const settingsI18n = {
@@ -399,6 +401,8 @@ export const Settings: React.FC = () => {
   const t = useT(settingsI18n);
   const { show, ToastContainer } = useToast();
   const { confirm, ConfirmDialog } = useConfirm();
+  const { theme, setTheme } = useTheme();
+  const { i18n } = useTranslation();
 
   const [settings, setSettings] = useState<SettingsType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -1050,6 +1054,65 @@ export const Settings: React.FC = () => {
       <ToastContainer />
       {ConfirmDialog}
       <div className="space-y-8">
+        {/* 外观与语言设置区块 */}
+        <div data-testid="appearance-section">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-foreground-primary mb-4 flex items-center">
+            <Globe size={20} />
+            <span className="ml-2">{t('settings.sections.appearance')}</span>
+          </h2>
+          <div className="p-4 bg-gray-50 dark:bg-background-primary border border-gray-200 dark:border-border-primary rounded-lg space-y-6">
+            {/* 界面语言 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-foreground-secondary mb-2">
+                {t('settings.language.label')}
+              </label>
+              <div className="flex gap-2">
+                {(['zh', 'en'] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => i18n.changeLanguage(lang)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      i18n.language?.startsWith(lang)
+                        ? 'bg-banana-500 text-white shadow-sm'
+                        : 'bg-white dark:bg-background-secondary border border-gray-200 dark:border-border-primary text-gray-700 dark:text-foreground-secondary hover:bg-gray-50 dark:hover:bg-background-hover'
+                    }`}
+                  >
+                    {t(`settings.language.${lang}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* 主题模式 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-foreground-secondary mb-2">
+                {t('settings.theme.label')}
+              </label>
+              <div className="flex gap-2">
+                {([
+                  { value: 'light', icon: <Sun size={14} />, labelKey: 'settings.theme.light' },
+                  { value: 'dark', icon: <Moon size={14} />, labelKey: 'settings.theme.dark' },
+                  { value: 'system', icon: <Monitor size={14} />, labelKey: 'settings.theme.system' },
+                ] as const).map(({ value, icon, labelKey }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setTheme(value)}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      theme === value
+                        ? 'bg-banana-500 text-white shadow-sm'
+                        : 'bg-white dark:bg-background-secondary border border-gray-200 dark:border-border-primary text-gray-700 dark:text-foreground-secondary hover:bg-gray-50 dark:hover:bg-background-hover'
+                    }`}
+                  >
+                    {icon}
+                    {t(labelKey)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* 默认 API 配置区块 */}
         <div data-testid="global-api-config-section">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-foreground-primary mb-1 flex items-center">
