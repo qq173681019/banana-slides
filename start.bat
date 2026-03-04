@@ -93,14 +93,14 @@ echo.
 
 REM --- 启动后端 ---
 echo  [启动] 正在启动后端服务（新窗口）...
-if "!USE_UV!"=="1" (
-    REM 使用 uv：先执行数据库迁移（成功后再启动 Flask）
-    start "Banana Slides 后端" cmd /k "title Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: !BACKEND_PORT! && echo. && cd /d %~dp0backend && uv run alembic upgrade head && uv run python app.py || (echo. && echo [错误] 后端启动失败，请查看上方报错信息。 && echo. && pause)"
-) else (
-    REM 使用 pip + venv 作为备用方案（含数据库迁移）
-    REM 注意：此处不能用 (if ...) 括号写法，否则 cmd 解析器会误判括号层级导致脚本退出
-    start "Banana Slides 后端" cmd /k "title Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: !BACKEND_PORT! && echo. && cd /d %~dp0backend && if not exist venv python -m venv venv && call venv\Scripts\activate.bat && pip install -q -e %~dp0. && python -m alembic upgrade head && python app.py || (echo. && echo [错误] 后端启动失败，请查看上方报错信息。 && echo. && pause)"
-)
+if not "!USE_UV!"=="1" goto start_backend_pip
+REM 使用 uv：先执行数据库迁移（成功后再启动 Flask）
+start "Banana Slides 后端" cmd /k "title Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: !BACKEND_PORT! && echo. && cd /d %~dp0backend && uv run alembic upgrade head && uv run python app.py || (echo. && echo [错误] 后端启动失败，请查看上方报错信息。 && echo. && pause)"
+goto backend_launched
+:start_backend_pip
+REM 使用 pip + venv 作为备用方案（含数据库迁移）
+start "Banana Slides 后端" cmd /k "title Banana Slides 后端服务 && echo. && echo  后端服务正在启动，请稍候... && echo  端口: !BACKEND_PORT! && echo. && cd /d %~dp0backend && if not exist venv python -m venv venv && call venv\Scripts\activate.bat && pip install -q -e %~dp0. && python -m alembic upgrade head && python app.py || (echo. && echo [错误] 后端启动失败，请查看上方报错信息。 && echo. && pause)"
+:backend_launched
 
 REM --- 等待后端就绪（轮询 /health 接口，最多等 60 秒）---
 echo     等待后端就绪...
@@ -115,7 +115,7 @@ goto wait_backend
 :backend_ready
 if !WAIT_COUNT! GEQ 30 (
     echo.
-    echo  [!] 后端未在 60 秒内就绪，请检查「Banana Slides 后端」窗口中的错误信息。
+    echo  [!!] 后端未在 60 秒内就绪，请检查「Banana Slides 后端」窗口中的错误信息。
     echo.
 )
 
@@ -136,7 +136,7 @@ goto wait_frontend
 :frontend_ready
 if !WAIT_COUNT! GEQ 30 (
     echo.
-    echo  [!] 前端未在 60 秒内就绪，请检查「Banana Slides 前端」窗口中的错误信息。
+    echo  [!!] 前端未在 60 秒内就绪，请检查「Banana Slides 前端」窗口中的错误信息。
     echo.
 )
 
