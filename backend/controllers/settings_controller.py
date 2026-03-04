@@ -21,7 +21,7 @@ from services.ai_providers import LAZYLLM_VENDORS
 from services.task_manager import task_manager
 
 logger = logging.getLogger(__name__)
-ALLOWED_PROVIDER_FORMATS = {"openai", "gemini", "lazyllm"} | LAZYLLM_VENDORS
+ALLOWED_PROVIDER_FORMATS = {"openai", "gemini", "lazyllm", "vertex"} | LAZYLLM_VENDORS
 
 settings_bp = Blueprint(
     "settings", __name__, url_prefix="/api/settings"
@@ -119,6 +119,14 @@ def temporary_settings_override(settings_override: dict):
         if settings_override.get("image_resolution"):
             original_values["DEFAULT_RESOLUTION"] = current_app.config.get("DEFAULT_RESOLUTION")
             current_app.config["DEFAULT_RESOLUTION"] = settings_override["image_resolution"]
+
+        if settings_override.get("vertex_project_id"):
+            original_values["VERTEX_PROJECT_ID"] = current_app.config.get("VERTEX_PROJECT_ID")
+            current_app.config["VERTEX_PROJECT_ID"] = settings_override["vertex_project_id"]
+
+        if settings_override.get("vertex_location"):
+            original_values["VERTEX_LOCATION"] = current_app.config.get("VERTEX_LOCATION")
+            current_app.config["VERTEX_LOCATION"] = settings_override["vertex_location"]
 
         if "enable_text_reasoning" in settings_override:
             original_values["ENABLE_TEXT_REASONING"] = current_app.config.get("ENABLE_TEXT_REASONING")
@@ -300,6 +308,13 @@ def update_settings():
             if base_field in data:
                 setattr(settings, base_field, (data[base_field] or "").strip() or None)
 
+        # Update Vertex AI configuration
+        if "vertex_project_id" in data:
+            settings.vertex_project_id = (data["vertex_project_id"] or "").strip() or None
+
+        if "vertex_location" in data:
+            settings.vertex_location = (data["vertex_location"] or "").strip() or None
+
         if "lazyllm_api_keys" in data:
             keys_data = data["lazyllm_api_keys"]
             if isinstance(keys_data, dict):
@@ -363,6 +378,8 @@ def reset_settings():
         for model_type in ('text', 'image', 'image_caption'):
             setattr(settings, f'{model_type}_api_key', None)
             setattr(settings, f'{model_type}_api_base_url', None)
+        settings.vertex_project_id = None
+        settings.vertex_location = None
         settings.image_resolution = None
         settings.image_aspect_ratio = None
         settings.max_description_workers = None
@@ -437,6 +454,10 @@ def verify_api_key():
             settings_override["ai_provider_format"] = settings.ai_provider_format
         if settings.text_model:
             settings_override["text_model"] = settings.text_model
+        if settings.vertex_project_id:
+            settings_override["vertex_project_id"] = settings.vertex_project_id
+        if settings.vertex_location:
+            settings_override["vertex_location"] = settings.vertex_location
 
         # 使用上下文管理器临时应用用户配置进行验证
         with temporary_settings_override(settings_override):
@@ -606,6 +627,16 @@ def _sync_settings_to_config(settings: Settings):
     
     # Sync Baidu OCR settings (fall back to Config default when NULL)
     current_app.config["BAIDU_API_KEY"] = settings.baidu_api_key or Config.BAIDU_API_KEY
+
+    # Sync Vertex AI settings (fall back to Config defaults when NULL)
+    new_vertex_project_id = settings.vertex_project_id or Config.VERTEX_PROJECT_ID
+    new_vertex_location = settings.vertex_location or Config.VERTEX_LOCATION
+    if current_app.config.get("VERTEX_PROJECT_ID") != new_vertex_project_id:
+        ai_config_changed = True
+    if current_app.config.get("VERTEX_LOCATION") != new_vertex_location:
+        ai_config_changed = True
+    current_app.config["VERTEX_PROJECT_ID"] = new_vertex_project_id
+    current_app.config["VERTEX_LOCATION"] = new_vertex_location
 
     # Sync per-model provider source settings
     for model_type, source_attr in [('TEXT', 'text_model_source'), ('IMAGE', 'image_model_source'), ('IMAGE_CAPTION', 'image_caption_model_source')]:

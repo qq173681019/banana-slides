@@ -16,6 +16,8 @@ def _build_settings(**overrides):
         'api_key': None,
         'api_base_url': None,
         'text_model': None,
+        'vertex_project_id': None,
+        'vertex_location': None,
     }
     defaults.update(overrides)
 
@@ -43,6 +45,28 @@ def test_update_settings_accepts_lazyllm_provider():
     data = response.get_json()
     assert data['success'] is True
     assert data['data']['ai_provider_format'] == 'lazyllm'
+
+
+def test_update_settings_accepts_vertex_provider():
+    """`vertex` should be accepted as a valid provider format."""
+    app = Flask(__name__)
+
+    settings = _build_settings()
+    with app.app_context():
+        with app.test_request_context(
+            '/api/settings/', method='PUT',
+            json={'ai_provider_format': 'vertex', 'vertex_project_id': 'my-project', 'vertex_location': 'us-central1'}
+        ):
+            with patch('controllers.settings_controller.Settings.get_settings', return_value=settings):
+                with patch('controllers.settings_controller.db.session.commit'):
+                    with patch('controllers.settings_controller._sync_settings_to_config'):
+                        response, status_code = update_settings()
+
+    assert status_code == 200
+    data = response.get_json()
+    assert data['success'] is True
+    assert settings.vertex_project_id == 'my-project'
+    assert settings.vertex_location == 'us-central1'
 
 
 def test_verify_uses_configured_text_model():
