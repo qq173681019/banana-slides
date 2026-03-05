@@ -3,6 +3,73 @@ title: "常见问题"
 description: "常见问题解答"
 ---
 
+## 如何验证我的 API Key 是否可用？
+
+在本地机器上运行内置验证脚本（无额外依赖）：
+
+```bash
+# 自动检测 .env 中所有厂商 Key 并逐一测试
+python scripts/check_api_keys.py
+
+# 直接测试指定厂商和 Key
+python scripts/check_api_keys.py --vendor qwen --key sk-YOUR_KEY_HERE
+
+# 测试 .env 中指定厂商的 Key
+python scripts/check_api_keys.py --vendor deepseek
+```
+
+脚本会调用各厂商 API 并报告结果：
+
+```
+==============================
+  Banana Slides — API Key Checker
+==============================
+
+[ 通义千问 (Alibaba Qwen) ]
+  Key   : sk-7ad9****113d
+  Testing... OK ✅  Model reply: "OK"
+
+[ DeepSeek ]
+  Key   : sk-abc0****ef12
+  Testing... Auth failed ❌  HTTP 401 → API key is invalid or expired
+```
+
+服务部署后，也可以在网页「**设置**」页面底部点击「**服务测试**」，通过后端端对端测试已配置的 Key。
+
+## 这个项目一定要接 Google API 吗？可以用 DeepSeek、Qwen 或 GLM 替代吗？
+
+不需要 —— Google API **并非必须**。在 `.env` 中设置 `AI_PROVIDER_FORMAT=lazyllm`，即可直接使用国产大模型，完全无需 Google 凭证。
+
+如果你有 **DeepSeek、通义千问（Qwen）和智谱（GLM）** 的 API Key，推荐如下配置：
+
+```env
+AI_PROVIDER_FORMAT=lazyllm
+
+# 文本生成：推荐 DeepSeek（qwen、glm 也可以）
+TEXT_MODEL_SOURCE=deepseek
+TEXT_MODEL=deepseek-v3
+
+# 图片生成：必须用 qwen —— DeepSeek 和 GLM 不支持图片生成
+IMAGE_MODEL_SOURCE=qwen
+IMAGE_MODEL=qwen-image-edit-plus
+
+# 图片描述（解析参考文件中的图片）：qwen-vl 或 glm-4v 均可
+IMAGE_CAPTION_MODEL_SOURCE=qwen
+IMAGE_CAPTION_MODEL=qwen-vl-max
+
+DEEPSEEK_API_KEY=sk-...
+QWEN_API_KEY=sk-...
+GLM_API_KEY=...   # 可选，如上方选用 glm 时填写
+```
+
+各厂商能力对照表和所有可用模型名称详见[配置说明](/zh/configuration#lazyllm多厂商路由)。
+
+修改 `.env` 后重启服务：
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+也可以通过网页「**设置**」页面完成上述全部配置，无需手动编辑 `.env`。
+
 ## 生成的文字有乱码或模糊
 
 - 检查是否处于 1K 低分辨率模式。在「**项目设置 → 全局设置**」中切换到 2K 或 4K 分辨率，文字清晰度差异明显。注意：部分 OpenAI 格式中转服务不支持调高分辨率，建议改用 Gemini 格式。

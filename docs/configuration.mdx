@@ -49,13 +49,47 @@ GOOGLE_APPLICATION_CREDENTIALS=./gcp-service-account.json
 
 ## LazyLLM (Multi-Vendor)
 
-Routes requests to different Chinese AI vendors for text, image, and caption tasks:
+Routes requests to different Chinese AI vendors for text, image, and caption tasks.
+You can mix vendors — e.g. DeepSeek for text, Qwen for images.
+
+**Vendor capability overview:**
+
+| Vendor | Text (`TEXT_MODEL_SOURCE`) | Image Generation (`IMAGE_MODEL_SOURCE`) | Image Captioning (`IMAGE_CAPTION_MODEL_SOURCE`) |
+|--------|:--------------------------:|:---------------------------------------:|:------------------------------------------------:|
+| `qwen` (Alibaba Qwen) | ✅ | ✅ | ✅ |
+| `doubao` (Volcengine) | ✅ | ✅ | ✅ |
+| `deepseek` | ✅ | ❌ | ❌ |
+| `glm` (Zhipu) | ✅ | ❌ | ✅ |
+| `siliconflow` | ✅ | ✅ | ✅ |
+| `minimax` | ✅ | ❌ | ✅ |
+| `sensenova` | ✅ | ❌ | ✅ |
+
+<Warning>
+  `deepseek` and `glm` do **not** support image generation. Do not set them as `IMAGE_MODEL_SOURCE`.
+  Use `qwen`, `doubao`, or `siliconflow` for image generation.
+</Warning>
+
+**Example — using DeepSeek + Qwen + GLM (no Google API required):**
 
 ```env
 AI_PROVIDER_FORMAT=lazyllm
+
+# Text: use DeepSeek (or qwen / glm)
 TEXT_MODEL_SOURCE=deepseek
-IMAGE_MODEL_SOURCE=doubao
+TEXT_MODEL=deepseek-v3
+
+# Image generation: must use qwen (deepseek and glm don't support this)
+IMAGE_MODEL_SOURCE=qwen
+IMAGE_MODEL=qwen-image-edit-plus
+
+# Image captioning from reference files: use Qwen or GLM vision model
 IMAGE_CAPTION_MODEL_SOURCE=qwen
+IMAGE_CAPTION_MODEL=qwen-vl-max
+
+# API keys (only configure the vendors you use)
+DEEPSEEK_API_KEY=your-deepseek-key
+QWEN_API_KEY=your-qwen-key
+GLM_API_KEY=your-glm-key       # optional, only if used above
 ```
 
 Set API keys for the vendors you use:

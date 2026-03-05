@@ -1021,6 +1021,8 @@ export interface TestSettingsOverride {
   text_thinking_budget?: number;
   enable_image_reasoning?: boolean;
   image_thinking_budget?: number;
+  vertex_project_id?: string;
+  vertex_location?: string;
 }
 
 /**

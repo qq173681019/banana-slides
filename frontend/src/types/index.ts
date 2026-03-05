@@ -156,6 +156,9 @@ export interface Settings {
   image_api_base_url?: string;
   image_caption_api_key_length: number;
   image_caption_api_base_url?: string;
+  // Vertex AI configuration
+  vertex_project_id?: string;
+  vertex_location?: string;
   created_at?: string;
   updated_at?: string;
 }

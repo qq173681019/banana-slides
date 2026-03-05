@@ -3,6 +3,73 @@ title: "FAQ"
 description: "Frequently asked questions"
 ---
 
+## How do I verify my API key is working?
+
+Run the built-in verification script on your local machine (no extra dependencies needed):
+
+```bash
+# Auto-detect all vendor keys from your .env and test them
+python scripts/check_api_keys.py
+
+# Test a specific vendor and key directly
+python scripts/check_api_keys.py --vendor qwen --key sk-YOUR_KEY_HERE
+
+# Test a specific vendor using .env
+python scripts/check_api_keys.py --vendor deepseek
+```
+
+The script will call each vendor's API and report whether the key is valid:
+
+```
+==============================
+  Banana Slides — API Key Checker
+==============================
+
+[ 通义千问 (Alibaba Qwen) ]
+  Key   : sk-7ad9****113d
+  Testing... OK ✅  Model reply: "OK"
+
+[ DeepSeek ]
+  Key   : sk-abc0****ef12
+  Testing... Auth failed ❌  HTTP 401 → API key is invalid or expired
+```
+
+Alternatively, after deploying the service, use the **Service Test** buttons at the bottom of the Settings page in the web UI — they test your configured keys end-to-end through the backend.
+
+## Does the project require Google API? Can I use DeepSeek, Qwen, or GLM instead?
+
+No — Google API is **not required**. Set `AI_PROVIDER_FORMAT=lazyllm` in `.env` to use Chinese AI vendors directly without any Google credentials.
+
+If you have **DeepSeek, Qwen (通义千问), and GLM (智谱)** API keys, here is the recommended configuration:
+
+```env
+AI_PROVIDER_FORMAT=lazyllm
+
+# Text: DeepSeek is a great default (qwen and glm also work)
+TEXT_MODEL_SOURCE=deepseek
+TEXT_MODEL=deepseek-v3
+
+# Image generation: must be qwen — DeepSeek and GLM do not support image generation
+IMAGE_MODEL_SOURCE=qwen
+IMAGE_MODEL=qwen-image-edit-plus
+
+# Image captioning (for reference file parsing): qwen-vl or glm-4v both work
+IMAGE_CAPTION_MODEL_SOURCE=qwen
+IMAGE_CAPTION_MODEL=qwen-vl-max
+
+DEEPSEEK_API_KEY=sk-...
+QWEN_API_KEY=sk-...
+GLM_API_KEY=...   # optional if you prefer glm for text/captions
+```
+
+See [LazyLLM configuration](/configuration#lazyllm-multi-vendor) for a full vendor capability table and all available model names.
+
+After editing `.env`, restart the service:
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+Or use the Settings page in the web UI — you can configure all of the above through the interface without touching `.env`.
+
 ## Generated text is garbled or blurry
 
 - Check if you're on 1K low-resolution mode. Switch to 2K or 4K in **Project Settings → Global Settings** — the difference in text clarity is significant. Note: some OpenAI-format proxy services don't support higher resolutions; use Gemini format instead.

@@ -25,6 +25,11 @@ const settingsI18n = {
         aiProviderFormat: "AI 提供商格式",
         aiProviderFormatDesc: "选择 API 请求格式，影响后端如何构造和发送请求。保存设置后生效。",
         openaiFormat: "OpenAI 格式", geminiFormat: "Gemini 格式", lazyllmFormat: "LazyLLM 格式",
+        vertexFormat: "Vertex AI 格式",
+        vertexProjectId: "Vertex AI Project ID", vertexProjectIdPlaceholder: "your-gcp-project-id",
+        vertexProjectIdDesc: "Google Cloud 项目 ID，使用 Vertex AI 时必须设置",
+        vertexLocation: "Vertex AI Location", vertexLocationPlaceholder: "us-central1",
+        vertexLocationDesc: "Vertex AI 服务区域，gemini-3-* 系列模型需设置为 global",
         apiBaseUrl: "API Base URL", apiBaseUrlPlaceholder: "https://api.example.com",
         apiBaseUrlDesc: "设置大模型提供商 API 的基础 URL",
         apiKey: "API Key", apiKeyPlaceholder: "输入新的 API Key",
@@ -54,6 +59,7 @@ const settingsI18n = {
         applyLink: "，请点击此处申请",
         textModelSource: "文本模型提供商格式", textModelSourceDesc: "选择文本生成使用的提供商格式", textModelSourcePlaceholder: "-- 请选择 --",
         imageModelSource: "图片模型提供商格式", imageModelSourceDesc: "选择图片生成使用的提供商格式", imageModelSourcePlaceholder: "-- 请选择 --",
+        imageModelSourceNoImageGenWarning: "⚠️ {{vendor}} 不支持图片生成，请改为选择 Qwen、Doubao 或 SiliconFlow。",
         imageCaptionModelSource: "图片识别模型提供商格式", imageCaptionModelSourceDesc: "选择图片识别使用的提供商格式", imageCaptionModelSourcePlaceholder: "-- 请选择 --",
         vendorApiKey: "{{vendor}} API Key", vendorApiKeyPlaceholder: "输入 {{vendor}} API Key",
         vendorApiKeyDesc: "留空则保持当前设置不变，输入新值则更新",
@@ -123,6 +129,11 @@ const settingsI18n = {
         aiProviderFormat: "AI Provider Format",
         aiProviderFormatDesc: "Select API request format, affects how backend constructs and sends requests. Takes effect after saving.",
         openaiFormat: "OpenAI Format", geminiFormat: "Gemini Format", lazyllmFormat: "LazyLLM Format",
+        vertexFormat: "Vertex AI Format",
+        vertexProjectId: "Vertex AI Project ID", vertexProjectIdPlaceholder: "your-gcp-project-id",
+        vertexProjectIdDesc: "Google Cloud Project ID, required when using Vertex AI",
+        vertexLocation: "Vertex AI Location", vertexLocationPlaceholder: "us-central1",
+        vertexLocationDesc: "Vertex AI service region, gemini-3-* series models require 'global'",
         apiBaseUrl: "API Base URL", apiBaseUrlPlaceholder: "https://api.example.com",
         apiBaseUrlDesc: "Set the base URL for the LLM provider API",
         apiKey: "API Key", apiKeyPlaceholder: "Enter new API Key",
@@ -152,6 +163,7 @@ const settingsI18n = {
         applyLink: ", click here to apply",
         textModelSource: "Text Model Provider Format", textModelSourceDesc: "Select the provider format for text generation", textModelSourcePlaceholder: "-- Select --",
         imageModelSource: "Image Model Provider Format", imageModelSourceDesc: "Select the provider format for image generation", imageModelSourcePlaceholder: "-- Select --",
+        imageModelSourceNoImageGenWarning: "⚠️ {{vendor}} does not support image generation. Please choose Qwen, Doubao, or SiliconFlow instead.",
         imageCaptionModelSource: "Image Caption Model Provider Format", imageCaptionModelSourceDesc: "Select the provider format for image captioning", imageCaptionModelSourcePlaceholder: "-- Select --",
         vendorApiKey: "{{vendor}} API Key", vendorApiKeyPlaceholder: "Enter {{vendor}} API Key",
         vendorApiKeyDesc: "Leave empty to keep current setting, enter new value to update",
@@ -262,8 +274,19 @@ const ALL_PROVIDER_SOURCES = [
 // 需要 API Key + Base URL 的提供商（非 LazyLLM 厂商）
 const API_KEY_PROVIDERS = new Set(['gemini', 'openai']);
 
+// 全局提供商格式选项（包括 Vertex AI）
+const GLOBAL_PROVIDER_FORMATS = [
+  { value: 'gemini', label: 'Gemini' },
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'vertex', label: 'Vertex AI' },
+  ...LAZYLLM_SOURCES.filter(s => s.value !== 'openai'),
+];
+
 // LazyLLM 厂商名集合
 const LAZYLLM_VENDOR_SET = new Set(LAZYLLM_SOURCES.map(s => s.value));
+
+// LazyLLM 厂商中不支持图片生成的厂商集合
+const NO_IMAGE_GEN_VENDORS = new Set(['deepseek', 'glm', 'minimax', 'sensenova']);
 
 // 初始表单数据
 const initialFormData = {
@@ -297,6 +320,9 @@ const initialFormData = {
   image_api_base_url: '',
   image_caption_api_key: '',
   image_caption_api_base_url: '',
+  // Vertex AI configuration
+  vertex_project_id: '',
+  vertex_location: '',
 };
 
 const isLazyllmVendor = (vendor: string) =>
@@ -369,6 +395,8 @@ const formDataFromSettings = (data: SettingsType): typeof initialFormData => ({
   image_api_base_url: data.image_api_base_url || '',
   image_caption_api_key: '',
   image_caption_api_base_url: data.image_caption_api_base_url || '',
+  vertex_project_id: data.vertex_project_id || '',
+  vertex_location: data.vertex_location || '',
 });
 
 // Settings 组件 - 纯嵌入模式（可复用）
@@ -671,6 +699,10 @@ export const Settings: React.FC = () => {
       if (formData.image_caption_api_key) testSettings.image_caption_api_key = formData.image_caption_api_key;
       if (formData.image_caption_api_base_url) testSettings.image_caption_api_base_url = formData.image_caption_api_base_url;
 
+      // Vertex AI configuration
+      if (formData.vertex_project_id) testSettings.vertex_project_id = formData.vertex_project_id;
+      if (formData.vertex_location) testSettings.vertex_location = formData.vertex_location;
+
       // 推理模式设置
       if (formData.enable_text_reasoning !== undefined) {
         testSettings.enable_text_reasoning = formData.enable_text_reasoning;
@@ -948,6 +980,14 @@ export const Settings: React.FC = () => {
           <p className="mt-1 text-sm text-gray-500 dark:text-foreground-tertiary">
             {t('settings.fields.modelProviderDesc')}
           </p>
+          {/* 图片生成不支持的厂商警告 */}
+          {item.sourceKey === 'image_model_source' && NO_IMAGE_GEN_VENDORS.has(sourceValue) && (
+            <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+              {t('settings.fields.imageModelSourceNoImageGenWarning', {
+                vendor: LAZYLLM_SOURCES.find(s => s.value === sourceValue)?.label || sourceValue,
+              })}
+            </p>
+          )}
         </div>
 
         {/* Gemini/OpenAI 提供商：显示 API Base URL + API Key */}
@@ -1041,7 +1081,7 @@ export const Settings: React.FC = () => {
                 onChange={(e) => handleFieldChange('ai_provider_format', e.target.value)}
                 className="w-full h-10 px-4 rounded-lg border border-gray-200 dark:border-border-primary bg-white dark:bg-background-secondary focus:outline-none focus:ring-2 focus:ring-banana-500 focus:border-transparent"
               >
-                {ALL_PROVIDER_SOURCES.map((option) => (
+                {GLOBAL_PROVIDER_FORMATS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
@@ -1079,6 +1119,32 @@ export const Settings: React.FC = () => {
             {/* LazyLLM 厂商: 厂商 API Key */}
             {isLazyllmVendor(formData.ai_provider_format) && (
               <GlobalVendorKeyInput vendor={formData.ai_provider_format} formData={formData} setFormData={setFormData} settings={settings} t={t} />
+            )}
+
+            {/* Vertex AI: Project ID + Location */}
+            {formData.ai_provider_format === 'vertex' && (
+              <div className="space-y-3 pl-3 border-l-2 border-banana-300 dark:border-banana-600">
+                <div>
+                  <Input
+                    label={t('settings.fields.vertexProjectId')}
+                    type="text"
+                    placeholder={t('settings.fields.vertexProjectIdPlaceholder')}
+                    value={formData.vertex_project_id}
+                    onChange={(e) => handleFieldChange('vertex_project_id', e.target.value)}
+                  />
+                  <p className="mt-1 text-sm text-gray-500 dark:text-foreground-tertiary">{t('settings.fields.vertexProjectIdDesc')}</p>
+                </div>
+                <div>
+                  <Input
+                    label={t('settings.fields.vertexLocation')}
+                    type="text"
+                    placeholder={t('settings.fields.vertexLocationPlaceholder')}
+                    value={formData.vertex_location}
+                    onChange={(e) => handleFieldChange('vertex_location', e.target.value)}
+                  />
+                  <p className="mt-1 text-sm text-gray-500 dark:text-foreground-tertiary">{t('settings.fields.vertexLocationDesc')}</p>
+                </div>
+              </div>
             )}
           </div>
 
