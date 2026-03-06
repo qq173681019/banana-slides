@@ -49,7 +49,7 @@ if errorlevel 1 (
 goto :done
 
 :use_uv
-uv run alembic upgrade head
+uv run python -m alembic upgrade heads
 if errorlevel 1 (
     echo.
     echo  [ERROR] Database migration failed.

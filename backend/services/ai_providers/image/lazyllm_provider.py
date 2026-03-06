@@ -160,8 +160,8 @@ class LazyLLMImageProvider(ImageProvider):
 
     def generate_image(self, prompt: str = None,
                        ref_images: Optional[List[Image.Image]] = None,
-                       aspect_ratio = "16:9",
-                       resolution = "1920*1080",
+                       aspect_ratio: str = "16:9",
+                       resolution: str = "2K",
                        enable_thinking: bool = False,
                        thinking_budget: int = 0
                        ) -> Optional[Image.Image]:
