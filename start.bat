@@ -133,10 +133,6 @@ if !WAIT_COUNT! GEQ 30 (
     echo.
 )
 
-REM --- 打开浏览器 ---
-echo  [启动] 正在打开浏览器...
-start "" "http://localhost:!FRONTEND_PORT!"
-
 echo.
 echo  ==========================================
 echo   Banana Slides 已启动！
@@ -146,7 +142,7 @@ echo   前端界面:  http://localhost:!FRONTEND_PORT!
 echo   后端接口:  http://localhost:!BACKEND_PORT!
 echo   健康检查:  http://localhost:!BACKEND_PORT!/health
 echo.
-echo   如果网页没有自动打开，请手动在浏览器中访问上方地址。
+echo   浏览器已由前端服务自动打开（若未自动打开，请手动访问上方地址）。
 echo   如遇错误，请查看「后端服务」和「前端服务」两个黑色窗口中的报错信息。
 echo.
 echo   关闭前请先在各服务窗口按 Ctrl+C 停止服务，
