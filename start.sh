@@ -35,8 +35,31 @@ else
 fi
 
 # -----------------------------------------------
-# 2. 读取端口配置（从 .env 中读取，默认 5000 / 3000）
+# 2. 读取端口配置（从 .env 中读取，空则按 worktree 目录名自动计算）
 # -----------------------------------------------
+
+# 计算 worktree 端口，与 app.py / vite.config.ts 算法保持一致
+# Compute a deterministic port from the worktree directory name (matches app.py / vite.config.ts).
+_compute_worktree_port() {
+    local base="$1"
+    local basename
+    basename=$(basename "$SCRIPT_DIR")
+    local hex
+    if command -v md5sum &>/dev/null; then
+        hex=$(printf '%s' "$basename" | md5sum | head -c 8)
+    elif command -v md5 &>/dev/null; then   # macOS
+        hex=$(printf '%s' "$basename" | md5 -q | head -c 8)
+    else
+        echo "$base"
+        return
+    fi
+    local offset=$(( 16#$hex % 500 ))
+    echo $(( base + offset ))
+}
+
+_COMPUTED_BACKEND_PORT=$(_compute_worktree_port 5000)
+_COMPUTED_FRONTEND_PORT=$(_compute_worktree_port 3000)
+
 _parse_port() {
     local key="$1"
     local default="$2"
@@ -49,8 +72,8 @@ _parse_port() {
     echo "${val:-$default}"
 }
 
-BACKEND_PORT=$(_parse_port "BACKEND_PORT" "5000")
-FRONTEND_PORT=$(_parse_port "FRONTEND_PORT" "3000")
+BACKEND_PORT=$(_parse_port "BACKEND_PORT" "$_COMPUTED_BACKEND_PORT")
+FRONTEND_PORT=$(_parse_port "FRONTEND_PORT" "$_COMPUTED_FRONTEND_PORT")
 
 echo "[2/4] 端口配置：后端=${BACKEND_PORT}  前端=${FRONTEND_PORT} ✓"
 echo ""
