@@ -612,6 +612,7 @@ const debouncedUpdatePage = debounce(
     // Concurrent queue: pages are pushed by SSE callbacks, drained by a timer loop
     const pageQueue: any[] = [];
     let streamDone = false;
+    let streamError: string | null = null;
     let doneData: { total: number; pages: any[]; complete?: boolean } | null = null;
     const STAGGER_MS = 150;
 
@@ -650,6 +651,7 @@ const debouncedUpdatePage = debounce(
         onDone: (data) => { doneData = data; },
         onError: (message) => {
           console.error('[流式大纲] 错误:', message);
+          streamError = message;
           set({ error: normalizeErrorMessage(message), isOutlineStreaming: false });
           streamDone = true;
         },
@@ -657,6 +659,11 @@ const debouncedUpdatePage = debounce(
 
       streamDone = true;
       await renderPromise;
+
+      // If an error SSE event was received, throw it so callers can show the proper error
+      if (streamError) {
+        throw new Error(streamError);
+      }
 
       // Replace temp pages with real persisted pages
       if (doneData) {
