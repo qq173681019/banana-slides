@@ -13,23 +13,29 @@ echo ""
 # 1. 检查并创建 .env 文件
 # -----------------------------------------------
 if [ ! -f "$SCRIPT_DIR/.env" ]; then
-    echo "[1/4] 未检测到 .env 文件，正在从模板创建..."
-    cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
-    echo "       .env 文件已创建！"
-    echo ""
-    echo " ⚠️  重要：请先编辑根目录下的 .env 文件，填入你的 API Key！"
-    echo "       例如: GOOGLE_API_KEY=你的密钥  或  OPENAI_API_KEY=你的密钥"
-    echo ""
-    echo " 正在用默认编辑器打开 .env 文件..."
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        open -e "$SCRIPT_DIR/.env"
+    if [ -f "$SCRIPT_DIR/usless" ]; then
+        echo "[1/4] 未检测到 .env 文件，从 usless 配置文件创建..."
+        cp "$SCRIPT_DIR/usless" "$SCRIPT_DIR/.env"
+        echo "       .env 文件已创建（使用 usless 中的配置）✓"
     else
-        "${EDITOR:-nano}" "$SCRIPT_DIR/.env"
+        echo "[1/4] 未检测到 .env 文件，正在从模板创建..."
+        cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
+        echo "       .env 文件已创建！"
+        echo ""
+        echo " ⚠️  重要：请先编辑根目录下的 .env 文件，填入你的 API Key！"
+        echo "       例如: GOOGLE_API_KEY=你的密钥  或  OPENAI_API_KEY=你的密钥"
+        echo ""
+        echo " 正在用默认编辑器打开 .env 文件..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            open -e "$SCRIPT_DIR/.env"
+        else
+            "${EDITOR:-nano}" "$SCRIPT_DIR/.env"
+        fi
+        echo ""
+        echo " 配置完毕后，请重新运行本脚本（按任意键退出）。"
+        read -rn1 _dummy
+        exit 0
     fi
-    echo ""
-    echo " 配置完毕后，请重新运行本脚本（按任意键退出）。"
-    read -rn1 _dummy
-    exit 0
 else
     echo "[1/4] 检测到 .env 文件 ✓"
 fi

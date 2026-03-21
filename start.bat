@@ -12,19 +12,25 @@ REM -----------------------------------------------
 REM 1. 检查并创建 .env 文件
 REM -----------------------------------------------
 if not exist ".env" (
-    echo [1/4] 未检测到 .env 文件，正在从模板创建...
-    copy ".env.example" ".env" >nul
-    echo        .env 文件已创建！
-    echo.
-    echo  ⚠️  重要：请先编辑根目录下的 .env 文件，填入你的 API Key！
-    echo        例如: GOOGLE_API_KEY=你的密钥  或  OPENAI_API_KEY=你的密钥
-    echo.
-    echo  用记事本打开 .env 文件...
-    start notepad ".env"
-    echo.
-    echo  配置完毕后，请重新运行本脚本（按任意键退出）。
-    pause >nul
-    exit /b 0
+    if exist "usless" (
+        echo [1/4] 未检测到 .env 文件，从 usless 配置文件创建...
+        copy "usless" ".env" >nul
+        echo        .env 文件已创建（使用 usless 中的配置）✓
+    ) else (
+        echo [1/4] 未检测到 .env 文件，正在从模板创建...
+        copy ".env.example" ".env" >nul
+        echo        .env 文件已创建！
+        echo.
+        echo  ⚠️  重要：请先编辑根目录下的 .env 文件，填入你的 API Key！
+        echo        例如: GOOGLE_API_KEY=你的密钥  或  OPENAI_API_KEY=你的密钥
+        echo.
+        echo  用记事本打开 .env 文件...
+        start notepad ".env"
+        echo.
+        echo  配置完毕后，请重新运行本脚本（按任意键退出）。
+        pause >nul
+        exit /b 0
+    )
 ) else (
     echo [1/4] 检测到 .env 文件 ✓
 )

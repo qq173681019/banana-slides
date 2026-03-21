@@ -15,8 +15,16 @@ from sqlalchemy.exc import SQLAlchemyError
 from flask_migrate import Migrate
 
 # Load environment variables from project root .env file
+# Also support 'usless' as a fallback configuration file (lower priority than .env).
+# The 'usless' file is a pre-filled configuration file included in the repo;
+# it sets variables not already present in the environment or .env file.
 _project_root = Path(__file__).parent.parent
 _env_file = _project_root / '.env'
+_usless_file = _project_root / 'usless'
+# Load usless first (lower priority: only sets vars not already in OS environment)
+if _usless_file.exists():
+    load_dotenv(dotenv_path=_usless_file, override=False)
+# Load .env last (higher priority: overrides everything including usless)
 load_dotenv(dotenv_path=_env_file, override=True)
 
 from flask import Flask
