@@ -26,6 +26,11 @@ if command -v uv &>/dev/null; then
         echo ""
         echo " [ERROR] Backend exited unexpectedly. Check the output above."
         echo ""
+        echo "   If you see 'Address already in use' / 端口已被占用："
+        echo "   - macOS: disable AirPlay Receiver in"
+        echo "     System Settings → General → AirDrop & Handoff"
+        echo "   - Or set a different port in .env: BACKEND_PORT=5001"
+        echo ""
     fi
 else
     # Fallback: pip + venv
@@ -60,6 +65,11 @@ else
     if [ $? -ne 0 ]; then
         echo ""
         echo " [ERROR] Backend exited unexpectedly. Check the output above."
+        echo ""
+        echo "   If you see 'Address already in use' / 端口已被占用："
+        echo "   - macOS: disable AirPlay Receiver in"
+        echo "     System Settings → General → AirDrop & Handoff"
+        echo "   - Or set a different port in .env: BACKEND_PORT=5001"
         echo ""
     fi
 fi

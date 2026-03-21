@@ -4,6 +4,7 @@ Simplified Flask Application Entry Point
 import os
 import sys
 import hmac
+import socket
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
@@ -342,6 +343,16 @@ def _compute_worktree_port(base_port: int) -> int:
     return base_port + offset
 
 
+def _is_port_available(port: int) -> bool:
+    """Return True if the given TCP port is available for binding."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(('127.0.0.1', port))
+            return True
+        except OSError:
+            return False
+
+
 if __name__ == '__main__':
     # Run development server
     if os.getenv("IN_DOCKER", "0") == "1":
@@ -350,6 +361,24 @@ if __name__ == '__main__':
         port = int(os.getenv('BACKEND_PORT'))
     else:
         port = _compute_worktree_port(5000)
+
+    # Pre-flight port availability check
+    if not _is_port_available(port):
+        logging.error(
+            f"\n"
+            f"❌ 端口 {port} 已被占用，无法启动后端服务。\n"
+            f"\n"
+            f"解决方案 / Solutions:\n"
+            f"  1. [macOS] 关闭「隔空播放接收器」（AirPlay Receiver）：\n"
+            f"     系统设置 → 通用 → 隔空投送与接力 → 关闭「隔空播放接收器」\n"
+            f"     System Settings → General → AirDrop & Handoff → disable AirPlay Receiver\n"
+            f"  2. 在 .env 文件中修改 BACKEND_PORT 为其他端口，例如：BACKEND_PORT=5001\n"
+            f"     Edit BACKEND_PORT in your .env file, e.g.: BACKEND_PORT=5001\n"
+            f"  3. 查找并停止占用该端口的程序 / Find the process using the port:\n"
+            f"     lsof -i :{port}"
+        )
+        sys.exit(1)
+
     debug = os.getenv('FLASK_ENV', 'development') == 'development'
     
     logging.info(
