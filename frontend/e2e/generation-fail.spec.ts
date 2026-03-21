@@ -58,7 +58,7 @@ test.describe('Generation failure handling', () => {
   })
 
   test('description: stays on Home when generateFromDescription fails', async ({ page }) => {
-    await setupFailureMocks(page, 'test-desc-fail', '**/api/projects/*/generate/from-description')
+    await setupFailureMocks(page, 'test-desc-fail', '**/api/projects/*/generate/from-description/stream')
 
     await page.locator('button').filter({ hasText: /从描述生成|From Description/i }).click()
 

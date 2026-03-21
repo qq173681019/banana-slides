@@ -625,6 +625,139 @@ def _sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+@project_bp.route('/<project_id>/generate/from-description/stream', methods=['POST'])
+def generate_from_description_stream(project_id):
+    """
+    POST /api/projects/{project_id}/generate/from-description/stream - Stream from-description generation via SSE
+
+    Streams progress events as the two-step AI generation proceeds, avoiding timeouts
+    on long-running synchronous requests.
+
+    SSE events:
+      event: progress  — step progress {step: 'outline_parsed'|'descriptions_split', total: number}
+      event: done      — generation complete {total, pages: [...with ids...]}
+      event: error     — error occurred {message}
+    """
+    project = Project.query.get(project_id)
+    if not project:
+        return not_found('Project')
+
+    data = request.get_json() or {}
+    language = data.get('language', current_app.config.get('OUTPUT_LANGUAGE', 'zh'))
+
+    app = current_app._get_current_object()
+
+    def sse_generate():
+        with app.app_context():
+            try:
+                proj = db.session.get(Project, project_id)
+
+                if proj.creation_type != 'descriptions':
+                    yield _sse_event('error', {'message': 'This endpoint is only for descriptions type projects'})
+                    return
+
+                description_text = data.get('description_text') or proj.description_text
+                if not description_text:
+                    yield _sse_event('error', {'message': 'description_text is required'})
+                    return
+
+                proj.description_text = description_text
+
+                ai_service = get_ai_service()
+                reference_files_content = _get_project_reference_files_content(project_id)
+                project_context = ProjectContext(proj, reference_files_content)
+
+                logger.info(f"开始流式从描述生成大纲和页面描述: 项目 {project_id}")
+
+                # Step 1: Parse description to outline
+                logger.info("Step 1: 解析描述文本到大纲结构...")
+                outline = ai_service.parse_description_to_outline(project_context, language=language)
+                flattened = ai_service.flatten_outline(outline)
+                total = len(flattened)
+                logger.info(f"大纲解析完成，共 {total} 页")
+
+                yield _sse_event('progress', {'step': 'outline_parsed', 'total': total})
+
+                # Step 2: Split description into page descriptions
+                logger.info("Step 2: 切分描述文本到每页描述...")
+                page_descriptions = ai_service.parse_description_to_page_descriptions(
+                    project_context, outline, language=language
+                )
+                logger.info(f"描述切分完成，共 {len(page_descriptions)} 页")
+
+                yield _sse_event('progress', {'step': 'descriptions_split', 'total': len(page_descriptions)})
+
+                # Step 3: Flatten outline to pages
+                pages_data = flattened
+
+                if len(pages_data) != len(page_descriptions):
+                    logger.warning(f"页面数量不匹配: 大纲 {len(pages_data)} 页, 描述 {len(page_descriptions)} 页")
+                    min_count = min(len(pages_data), len(page_descriptions))
+                    pages_data = pages_data[:min_count]
+                    page_descriptions = page_descriptions[:min_count]
+
+                # Step 4: Delete existing pages (using ORM session to trigger cascades)
+                old_pages = Page.query.filter_by(project_id=project_id).all()
+                for old_page in old_pages:
+                    db.session.delete(old_page)
+
+                # Step 5: Create pages with both outline and description
+                pages_list = []
+                for i, (page_data, page_desc) in enumerate(zip(pages_data, page_descriptions)):
+                    page = Page(
+                        project_id=project_id,
+                        order_index=i,
+                        part=page_data.get('part'),
+                        status='DESCRIPTION_GENERATED'
+                    )
+                    page.set_outline_content({
+                        'title': page_data.get('title'),
+                        'points': page_data.get('points', [])
+                    })
+                    desc_content = {
+                        "text": page_desc,
+                        "generated_at": datetime.utcnow().isoformat()
+                    }
+                    page.set_description_content(desc_content)
+                    db.session.add(page)
+                    pages_list.append(page)
+
+                # Update project status
+                proj.status = 'DESCRIPTIONS_GENERATED'
+                proj.updated_at = datetime.utcnow()
+                db.session.commit()
+
+                logger.info(f"流式从描述生成完成: 项目 {project_id}, 创建了 {len(pages_list)} 个页面")
+
+                yield _sse_event('done', {
+                    'total': len(pages_list),
+                    'pages': [p.to_dict() for p in pages_list],
+                })
+
+            except Exception as e:
+                try:
+                    db.session.rollback()
+                except Exception as rollback_exc:
+                    logger.warning(f"Session rollback failed: {rollback_exc}", exc_info=True)
+                logger.error(f"generate_from_description_stream failed: {str(e)}", exc_info=True)
+                error_msg = str(e)
+                if 'api_key' in error_msg.lower() or 'google_api_key' in error_msg.lower() or ('key' in error_msg.lower() and 'required' in error_msg.lower()):
+                    error_msg = 'API Key 未配置，请先在设置页面配置 API Key 后再生成。'
+                elif 'openai_api_key' in error_msg.lower():
+                    error_msg = 'OpenAI API Key 未配置，请先在设置页面配置后再生成。'
+                yield _sse_event('error', {'message': error_msg})
+
+    return Response(
+        stream_with_context(sse_generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive',
+        },
+    )
+
+
 @project_bp.route('/<project_id>/generate/from-description', methods=['POST'])
 def generate_from_description(project_id):
     """
