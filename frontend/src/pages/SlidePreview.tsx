@@ -24,7 +24,8 @@ const previewI18n = {
     },
     preview: {
       title: "预览", pageCount: "共 {{count}} 页", export: "导出",
-      exportPptx: "导出为 PPTX", exportPdf: "导出为 PDF",
+      exportPptx: "导出为 PPTX（包含图片）", exportPdf: "导出为 PDF",
+      exportPptxNoImages: "导出为 PPTX（跳过图片）", exportPptxSkipImages: "跳过图片导出",
       exportEditablePptx: "导出可编辑 PPTX（Beta）", exportImages: "导出为图片",
       exportSelectedPages: "将导出选中的 {{count}} 页",
       regenerate: "重新生成", regenerating: "生成中...",
@@ -92,7 +93,8 @@ const previewI18n = {
     },
     preview: {
       title: "Preview", pageCount: "{{count}} pages", export: "Export",
-      exportPptx: "Export as PPTX", exportPdf: "Export as PDF",
+      exportPptx: "Export as PPTX (with images)", exportPdf: "Export as PDF",
+      exportPptxNoImages: "Export as PPTX (skip images)", exportPptxSkipImages: "Skip Images",
       exportEditablePptx: "Export Editable PPTX (Beta)", exportImages: "Export as Images",
       exportSelectedPages: "Will export {{count}} selected page(s)",
       regenerate: "Regenerate", regenerating: "Generating...",
@@ -174,7 +176,7 @@ import { SlideCard } from '@/components/preview/SlideCard';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useExportTasksStore, type ExportTaskType } from '@/store/useExportTasksStore';
 import { getImageUrl } from '@/api/client';
-import { getPageImageVersions, setCurrentImageVersion, updateProject, uploadTemplate, exportPPTX as apiExportPPTX, exportPDF as apiExportPDF, exportImages as apiExportImages, exportEditablePPTX as apiExportEditablePPTX, getSettings } from '@/api/endpoints';
+import { getPageImageVersions, setCurrentImageVersion, updateProject, uploadTemplate, exportPPTX as apiExportPPTX, exportPPTXWithoutImages as apiExportPPTXWithoutImages, exportPDF as apiExportPDF, exportImages as apiExportImages, exportEditablePPTX as apiExportEditablePPTX, getSettings } from '@/api/endpoints';
 import type { ImageVersion, DescriptionContent, ExportExtractorMethod, ExportInpaintMethod, Page } from '@/types';
 import { normalizeErrorMessage } from '@/utils';
 
@@ -968,7 +970,7 @@ export const SlidePreview: React.FC = () => {
     return Array.from(selectedPageIds);
   };
 
-  const handleExport = async (type: 'pptx' | 'pdf' | 'editable-pptx' | 'images') => {
+  const handleExport = async (type: 'pptx' | 'pdf' | 'editable-pptx' | 'images' | 'pptx-no-images') => {
     setShowExportMenu(false);
     if (!projectId) return;
 
@@ -976,9 +978,9 @@ export const SlidePreview: React.FC = () => {
     const exportTaskId = `export-${Date.now()}`;
 
     try {
-      if (type === 'pptx' || type === 'pdf' || type === 'images') {
+      if (type === 'pptx' || type === 'pdf' || type === 'images' || type === 'pptx-no-images') {
         // Synchronous export - direct download, create completed task directly
-        const exportApi = { pptx: apiExportPPTX, pdf: apiExportPDF, images: apiExportImages };
+        const exportApi = { pptx: apiExportPPTX, 'pptx-no-images': apiExportPPTXWithoutImages, pdf: apiExportPDF, images: apiExportImages };
         const response = await exportApi[type](projectId, pageIds);
         const downloadUrl = response.data?.download_url || response.data?.download_url_absolute;
         if (downloadUrl) {
@@ -986,7 +988,7 @@ export const SlidePreview: React.FC = () => {
             id: exportTaskId,
             taskId: '',
             projectId,
-            type: type as ExportTaskType,
+            type: (type === 'pptx-no-images' ? 'pptx' : type) as ExportTaskType,
             status: 'COMPLETED',
             downloadUrl,
             pageIds: pageIds,
@@ -1348,7 +1350,7 @@ export const SlidePreview: React.FC = () => {
             </div>
           )}
           
-          <div className="relative">
+          <div className="relative flex items-center gap-2">
             <Button
               variant="primary"
               size="sm"
@@ -1372,6 +1374,22 @@ export const SlidePreview: React.FC = () => {
                   : t('preview.export')}
               </span>
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              icon={<Download size={16} className="md:w-[18px] md:h-[18px]" />}
+              onClick={() => handleExport('pptx-no-images')}
+              disabled={isMultiSelectMode && selectedPageIds.size === 0}
+              title="跳过图片生成，直接导出文字版 PPT"
+              className="text-xs md:text-sm"
+            >
+              <span className="hidden sm:inline">
+                {t('preview.exportPptxSkipImages')}
+              </span>
+              <span className="sm:hidden">
+                跳过导出
+              </span>
+            </Button>
             {showExportMenu && (
               <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-background-secondary rounded-lg shadow-lg border border-gray-200 dark:border-border-primary py-2 z-10">
                 {isMultiSelectMode && selectedPageIds.size > 0 && (
@@ -1384,6 +1402,12 @@ export const SlidePreview: React.FC = () => {
                   className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-background-hover transition-colors text-sm"
                 >
                   {t('preview.exportPptx')}
+                </button>
+                <button
+                  onClick={() => handleExport('pptx-no-images')}
+                  className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-background-hover transition-colors text-sm"
+                >
+                  {t('preview.exportPptxNoImages')}
                 </button>
                 <button
                   onClick={() => handleExport('editable-pptx')}

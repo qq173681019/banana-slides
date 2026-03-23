@@ -13,7 +13,9 @@ from typing import List, Dict, Any, Optional, Tuple
 from textwrap import dedent
 from dataclasses import dataclass, field
 from pptx import Presentation
-from pptx.util import Inches
+from pptx.util import Inches, Pt
+from pptx.enum.text import PP_ALIGN
+from pptx.dml.color import RGBColor
 from PIL import Image
 import io
 import tempfile
@@ -255,7 +257,199 @@ class ExportService:
             prs.save(pptx_bytes)
             pptx_bytes.seek(0)
             return pptx_bytes.getvalue()
-    
+
+    @staticmethod
+    def create_pptx_from_text(pages: List[Any], output_file: str = None, aspect_ratio: str = '16:9') -> bytes:
+        """
+        Create PPTX file from page text (outline and description)
+        用于在跳过图片生成时导出纯文字 PPT
+
+        Args:
+            pages: List of Page objects (from database)
+            output_file: Optional output file path (if None, returns bytes)
+            aspect_ratio: Aspect ratio for slides
+
+        Returns:
+            PPTX file as bytes if output_file is None
+        """
+        from pptx.util import Pt
+        from pptx.enum.text import MSO_AUTO_SIZE
+
+        # Create presentation
+        prs = Presentation()
+
+        # Set author/date metadata
+        try:
+            core = prs.core_properties
+            now = datetime.now(timezone.utc)
+            core.author = "banana-slides"
+            core.last_modified_by = "banana-slides"
+            core.created = now
+            core.modified = now
+            core.last_printed = None
+        except Exception as e:
+            logger.warning(f"Failed to set core properties: {e}")
+
+        # Set slide dimensions based on aspect ratio
+        page_w, page_h = _get_page_size_inches(aspect_ratio)
+        prs.slide_width = Inches(page_w)
+        prs.slide_height = Inches(page_h)
+
+        # Add each page as a slide with text
+        for page in pages:
+            # Add blank slide layout
+            blank_slide_layout = prs.slide_layouts[6]
+            slide = prs.slides.add_slide(blank_slide_layout)
+
+            # Extract title from various possible data structures
+            title = ""
+            try:
+                # Try direct attributes (SQLAlchemy model)
+                if hasattr(page, 'title'):
+                    title_candidate = page.title or ""
+                    # 只有当 title 真正有内容时才使用，否则继续尝试其他方式
+                    if title_candidate and title_candidate.strip():
+                        title = title_candidate
+                        logger.info(f"[create_pptx_from_text] 从 title 属性提取: {title}")
+
+                # 如果 title 还没有值，尝试从 outline_content 获取
+                if not title:
+                    # Try nested outline_content (API response)
+                    if hasattr(page, 'outline_content') and isinstance(page.outline_content, dict):
+                        title_candidate = page.outline_content.get('title', '')
+                        if title_candidate and title_candidate.strip():
+                            title = title_candidate
+                            logger.info(f"[create_pptx_from_text] 从 outline_content 提取: {title}")
+
+                # 如果 title 还是没有值，尝试从字典获取
+                if not title:
+                    # Try dictionary access (plain dict)
+                    if isinstance(page, dict):
+                        title_candidate = page.get('title', '')
+                        if title_candidate and title_candidate.strip():
+                            title = title_candidate
+                        else:
+                            # 如果直接没有 title，尝试从 outline_content 获取
+                            if 'outline_content' in page and isinstance(page['outline_content'], dict):
+                                title_candidate = page['outline_content'].get('title', '')
+                                if title_candidate and title_candidate.strip():
+                                    title = title_candidate
+                                    logger.info(f"[create_pptx_from_text] 从字典的 outline_content 提取: {title}")
+
+                if not title:
+                    logger.warning(f"[create_pptx_from_text] 无法提取标题，页面类型: {type(page)}, 页面数据: {str(page)[:200]}")
+            except Exception as e:
+                logger.warning(f"[create_pptx_from_text] 提取标题时出错: {e}")
+
+            logger.info(f"[create_pptx_from_text] 最终标题: '{title}' (长度: {len(title)})")
+
+            if title:
+                # Add title text box
+                title_box = slide.shapes.add_textbox(
+                    left=Inches(0.5),
+                    top=Inches(0.5),
+                    width=prs.slide_width - Inches(1.0),
+                    height=Inches(1.0)
+                )
+                title_frame = title_box.text_frame
+                title_frame.text = title
+                title_frame.word_wrap = True
+
+                # Title formatting
+                title_para = title_frame.paragraphs[0]
+                title_para.font.size = Pt(32)
+                title_para.font.bold = True
+                title_para.font.name = "微软雅黑"
+                title_para.alignment = PP_ALIGN.LEFT
+
+            # Extract description from various possible data structures
+            description = ""
+            try:
+                # Try direct attributes (SQLAlchemy model)
+                if hasattr(page, 'description'):
+                    desc_candidate = page.description or ""
+                    if desc_candidate and desc_candidate.strip():
+                        description = desc_candidate
+                        logger.info(f"[create_pptx_from_text] 从 description 属性提取: {description[:50]}...")
+
+                # 如果 description 还是没有值，尝试从 description_content 获取
+                if not description:
+                    # Try nested description_content.text (API response)
+                    if hasattr(page, 'description_content') and isinstance(page.description_content, dict):
+                        desc_obj = page.description_content.get('text', '')
+                        if desc_obj:
+                            description = desc_obj if isinstance(desc_obj, str) else str(desc_obj)
+                            if description and description.strip():
+                                logger.info(f"[create_pptx_from_text] 从 description_content 提取: {description[:50]}...")
+
+                # 如果 description 还是没有值，尝试从字典获取
+                if not description:
+                    # Try dictionary access (plain dict)
+                    if isinstance(page, dict):
+                        desc_candidate = page.get('description', '')
+                        if desc_candidate and desc_candidate.strip():
+                            description = desc_candidate
+                            logger.info(f"[create_pptx_from_text] 从字典的 description 提取: {description[:50]}...")
+                        else:
+                            # 如果直接没有 description，尝试从 description_content 获取
+                            if 'description_content' in page and isinstance(page['description_content'], dict):
+                                desc_obj = page['description_content'].get('text', '')
+                                description = desc_obj if isinstance(desc_obj, str) else str(desc_obj)
+                                if description and description.strip():
+                                    logger.info(f"[create_pptx_from_text] 从字典的 description_content 提取: {description[:50]}...")
+
+                if not description:
+                    logger.warning(f"[create_pptx_from_text] 无法提取描述，页面类型: {type(page)}, 页面数据: {str(page)[:200]}")
+            except Exception as e:
+                logger.warning(f"[create_pptx_from_text] 提取描述时出错: {e}")
+
+            logger.info(f"[create_pptx_from_text] 最终描述长度: {len(description)}")
+
+            if description:
+                # Calculate top position based on whether title exists
+                desc_top = Inches(1.8) if title else Inches(0.5)
+                desc_height = prs.slide_height - Inches(2.8) if title else prs.slide_height - Inches(1.5)
+
+                # Add description text box
+                desc_box = slide.shapes.add_textbox(
+                    left=Inches(0.5),
+                    top=desc_top,
+                    width=prs.slide_width - Inches(1.0),
+                    height=desc_height
+                )
+                desc_frame = desc_box.text_frame
+                desc_frame.text = description
+                desc_frame.word_wrap = True
+
+                # Description formatting
+                desc_para = desc_frame.paragraphs[0]
+                desc_para.font.size = Pt(18)
+                desc_para.font.name = "微软雅黑"
+                desc_para.alignment = PP_ALIGN.LEFT
+
+                # Add "Generated by Banana Slides" footer
+                footer_text = slide.shapes.add_textbox(
+                    left=Inches(0.5),
+                    top=prs.slide_height - Inches(0.6),
+                    width=prs.slide_width - Inches(1.0),
+                    height=Inches(0.4)
+                )
+                footer_frame = footer_text.text_frame
+                footer_frame.text = "Generated by Banana Slides (Text-only export)"
+                footer_frame.paragraphs[0].font.size = Pt(10)
+                footer_frame.paragraphs[0].font.color.rgb = RGBColor(128, 128, 128)
+
+        # Save or return bytes
+        if output_file:
+            prs.save(output_file)
+            return None
+        else:
+            # Save to bytes
+            pptx_bytes = io.BytesIO()
+            prs.save(pptx_bytes)
+            pptx_bytes.seek(0)
+            return pptx_bytes.getvalue()
+
     @staticmethod
     def create_pdf_from_images(image_paths: List[str], output_file: str = None, aspect_ratio: str = '16:9') -> Optional[bytes]:
         """

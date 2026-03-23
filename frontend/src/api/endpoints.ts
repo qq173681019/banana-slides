@@ -544,6 +544,22 @@ export const exportPPTX = async (
 };
 
 /**
+ * 导出为PPTX（跳过图片生成）
+ * @param projectId 项目ID
+ * @param pageIds 可选的页面ID列表，如果不提供则导出所有页面
+ */
+export const exportPPTXWithoutImages = async (
+  projectId: string,
+  pageIds?: string[]
+): Promise<ApiResponse<{ download_url: string; download_url_absolute?: string }>> => {
+  const url = `/api/projects/${projectId}/export/pptx${buildPageIdsQuery(pageIds)}&skip_images=true`;
+  const response = await apiClient.get<
+    ApiResponse<{ download_url: string; download_url_absolute?: string }>
+  >(url);
+  return response.data;
+};
+
+/**
  * 导出为PDF
  * @param projectId 项目ID
  * @param pageIds 可选的页面ID列表，如果不提供则导出所有页面

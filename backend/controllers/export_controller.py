@@ -27,11 +27,12 @@ export_bp = Blueprint('export', __name__, url_prefix='/api/projects')
 def export_pptx(project_id):
     """
     GET /api/projects/{project_id}/export/pptx?filename=...&page_ids=id1,id2,id3 - Export PPTX
-    
+
     Query params:
         - filename: optional custom filename
         - page_ids: optional comma-separated page IDs to export (if not provided, exports all pages)
-    
+        - skip_images: set to 'true' to skip image generation and export text-only PPTX
+
     Returns:
         JSON with download URL, e.g.
         {
@@ -44,31 +45,37 @@ def export_pptx(project_id):
     """
     try:
         project = Project.query.get(project_id)
-        
+
         if not project:
             return not_found('Project')
-        
+
         # Get page_ids from query params and fetch filtered pages
         selected_page_ids = parse_page_ids_from_query(request)
         logger.debug(f"[export_pptx] selected_page_ids: {selected_page_ids}")
-        
+
         pages = get_filtered_pages(project_id, selected_page_ids if selected_page_ids else None)
         logger.debug(f"[export_pptx] Exporting {len(pages)} pages")
-        
+
         if not pages:
             return bad_request("No pages found for project")
-        
+
+        # Check if skip_images flag is set
+        skip_images = request.args.get('skip_images', '').lower() in ('true', '1', 'yes')
+
         # Get image paths
         file_service = FileService(current_app.config['UPLOAD_FOLDER'])
-        
+
         image_paths = []
         for page in pages:
             if page.generated_image_path:
                 abs_path = file_service.get_absolute_path(page.generated_image_path)
                 image_paths.append(abs_path)
-        
-        if not image_paths:
-            return bad_request("No generated images found for project")
+
+        # If skip_images is true, always use text-only export (regardless of image_paths)
+        if skip_images:
+            logger.info(f"[export_pptx] Using text-only export (skip_images={skip_images})")
+        elif not image_paths:
+            return bad_request("No generated images found for project. Use skip_images=true to export text-only PPTX.")
         
         # Determine export directory and filename
         exports_dir = file_service._get_exports_dir(project_id)
@@ -81,7 +88,30 @@ def export_pptx(project_id):
         output_path = os.path.join(exports_dir, filename)
 
         # Generate PPTX file on disk
-        ExportService.create_pptx_from_images(image_paths, output_file=output_path, aspect_ratio=project.image_aspect_ratio)
+        if skip_images:
+            # Export text-only PPTX (from outline and descriptions)
+            logger.info(f"[export_pptx] Starting text-only PPTX export")
+            logger.info(f"[export_pptx] Pages count: {len(pages)}")
+            logger.info(f"[export_pptx] Output path: {output_path}")
+            logger.info(f"[export_pptx] Aspect ratio: {project.image_aspect_ratio}")
+
+            # Log first page data for debugging
+            if pages:
+                first_page = pages[0]
+                logger.info(f"[export_pptx] First page type: {type(first_page)}")
+                logger.info(f"[export_pptx] First page dict keys: {list(first_page.keys()) if isinstance(first_page, dict) else 'N/A'}")
+                logger.info(f"[export_pptx] First page data: {str(first_page)[:300]}")
+
+            ExportService.create_pptx_from_text(
+                pages=pages,
+                output_file=output_path,
+                aspect_ratio=project.image_aspect_ratio
+            )
+            logger.info(f"[export_pptx] Text-only PPTX export completed")
+        else:
+            # Export PPTX from images
+            logger.info(f"[export_pptx] Starting image-based PPTX export with {len(image_paths)} images")
+            ExportService.create_pptx_from_images(image_paths, output_file=output_path, aspect_ratio=project.image_aspect_ratio)
 
         # Build download URLs
         download_path = f"/files/{project_id}/exports/{filename}"

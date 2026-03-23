@@ -8,7 +8,7 @@ import json
 import re
 import logging
 import requests
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional, Union, Any
 from textwrap import dedent
 from PIL import Image
 from tenacity import retry, stop_after_attempt, retry_if_exception_type
@@ -225,7 +225,12 @@ class AIService:
         cleaned_text = response_text.strip().strip("```json").strip("```").strip()
         
         try:
-            return json.loads(cleaned_text)
+            result = json.loads(cleaned_text)
+            # 验证返回类型是字典或列表，避免返回简单字符串
+            if not isinstance(result, (dict, list)):
+                logger.warning(f"JSON解析结果类型错误，期望 dict/list，得到 {type(result).__name__}。原始文本: {cleaned_text[:200]}...")
+                raise ValueError(f"Invalid JSON type: {type(result).__name__}, expected dict or list")
+            return result
         except json.JSONDecodeError as e:
             logger.warning(f"JSON解析失败，将重新生成。原始文本: {cleaned_text[:200]}... 错误: {str(e)}")
             raise
@@ -273,7 +278,12 @@ class AIService:
         cleaned_text = response_text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
         
         try:
-            return json.loads(cleaned_text)
+            result = json.loads(cleaned_text)
+            # 验证返回类型是字典或列表，避免返回简单字符串
+            if not isinstance(result, (dict, list)):
+                logger.warning(f"JSON解析结果类型错误（带图片），期望 dict/list，得到 {type(result).__name__}。原始文本: {cleaned_text[:200]}...")
+                raise ValueError(f"Invalid JSON type: {type(result).__name__}, expected dict or list")
+            return result
         except json.JSONDecodeError as e:
             logger.warning(f"JSON解析失败（带图片），将重新生成。原始文本: {cleaned_text[:200]}... 错误: {str(e)}")
             raise
@@ -476,22 +486,90 @@ class AIService:
         outline = self.generate_json(parse_prompt, thinking_budget=1000)
         return outline
     
-    def flatten_outline(self, outline: List[Dict]) -> List[Dict]:
+    def flatten_outline(self, outline: Union[List[Dict], List[str], Any]) -> List[Dict]:
         """
         Flatten outline structure to page list
         Based on demo.py flatten_outline()
+
+        Args:
+            outline: Outline data (list of dicts, list of strings, or other format)
+
+        Returns:
+            List of page dictionaries with 'title', 'points', 'part' keys
         """
         pages = []
+
+        # Handle various input formats
+        if not outline:
+            return []
+
+        # If outline is a list of strings, convert to page dicts
+        if isinstance(outline, list) and outline and isinstance(outline[0], str):
+            logger.warning("Outline is a list of strings, converting to page dicts")
+            for item in outline:
+                pages.append({
+                    "title": str(item).strip(),
+                    "points": [],
+                    "part": None
+                })
+            return pages
+
+        # If outline is a single dict with 'pages' key, flatten it
+        if isinstance(outline, dict) and "pages" in outline:
+            outline = outline["pages"]
+
+        # If outline is a single string, convert to a single page
+        if isinstance(outline, str):
+            logger.warning("Outline is a single string, converting to page dict")
+            return [{
+                "title": outline.strip(),
+                "points": [],
+                "part": None
+            }]
+
+        # Ensure outline is a list
+        if not isinstance(outline, list):
+            logger.warning(f"Outline is not a list: {type(outline).__name__}, converting to list")
+            outline = [outline]
+
+        # Process each item
         for item in outline:
+            # Skip non-dict items
+            if not isinstance(item, dict):
+                logger.warning(f"Skipping non-dict item in outline: {type(item).__name__} = {str(item)[:100]}")
+                continue
+
             if "part" in item and "pages" in item:
                 # This is a part, expand its pages
                 for page in item["pages"]:
+                    # Ensure page is a dict
+                    if not isinstance(page, dict):
+                        logger.warning(f"Skipping non-dict page in part: {type(page).__name__}")
+                        continue
                     page_with_part = page.copy()
                     page_with_part["part"] = item["part"]
                     pages.append(page_with_part)
             else:
                 # This is a direct page
+                # Ensure required fields exist
+                if "title" not in item:
+                    logger.warning(f"Page missing 'title' field: {list(item.keys())[:5]}")
+                    item = item.copy()
+                    item["title"] = "Untitled"
+                if "points" not in item:
+                    item = item.copy()
+                    item["points"] = item.get("points", [])
                 pages.append(item)
+
+        # If no pages were created, create a fallback page
+        if not pages:
+            logger.warning("No valid pages created from outline, creating fallback page")
+            pages = [{
+                "title": "Generated Outline",
+                "points": [],
+                "part": None
+            }]
+
         return pages
     
     def generate_page_description(self, project_context: ProjectContext, outline: List[Dict],

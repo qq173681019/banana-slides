@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul 2>&1
 title Banana Slides - Backend Service
 echo.
 echo  ==========================================
@@ -9,61 +8,49 @@ echo.
 echo  Starting, please wait...
 echo.
 cd /d "%~dp0backend"
-uv --version >nul 2>&1
-if not errorlevel 1 goto :use_uv
 
-:use_pip
+REM Use pip instead of uv
+echo [1/3] Creating virtual environment...
 if not exist venv (
     python -m venv venv
     if errorlevel 1 (
         echo.
-        echo  [ERROR] Failed to create virtual environment.
+        echo [ERROR] Failed to create virtual environment.
         echo.
-        pause >nul
+        pause
         exit /b 1
     )
 )
+
+echo [2/3] Installing dependencies...
 call venv\Scripts\activate.bat
-pip install -q -e "%~dp0."
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r ..\requirements.txt
 if errorlevel 1 (
     echo.
-    echo  [ERROR] Failed to install dependencies.
+    echo [ERROR] Failed to install dependencies.
     echo.
-    pause >nul
+    pause
     exit /b 1
 )
+
+echo [3/3] Running database migration...
 python -m alembic upgrade head
 if errorlevel 1 (
     echo.
-    echo  [ERROR] Database migration failed.
+    echo [ERROR] Database migration failed.
     echo.
-    pause >nul
+    pause
     exit /b 1
 )
+
+echo.
+echo [Starting] Flask application...
+echo.
 python app.py
 if errorlevel 1 (
     echo.
-    echo  [ERROR] Backend exited unexpectedly. Check the output above.
-    echo.
-)
-goto :done
-
-:use_uv
-uv run python -m alembic upgrade heads
-if errorlevel 1 (
-    echo.
-    echo  [ERROR] Database migration failed.
-    echo.
-    pause >nul
-    exit /b 1
-)
-uv run python app.py
-if errorlevel 1 (
-    echo.
-    echo  [ERROR] Backend exited unexpectedly. Check the output above.
+    echo [ERROR] Backend exited unexpectedly.
     echo.
 )
 
-:done
-echo  Press any key to close this window...
-pause >nul
+pause
