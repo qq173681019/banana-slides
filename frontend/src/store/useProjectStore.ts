@@ -262,7 +262,22 @@ const debouncedUpdatePage = debounce(
       if (type === 'outline') {
         await generateWithRollback(() => api.generateOutline(projectId), '生成大纲');
       } else if (type === 'description') {
-        await generateWithRollback(() => api.generateFromDescription(projectId, content), '从描述生成大纲和页面描述');
+        await generateWithRollback(
+          () => new Promise<void>((resolve, reject) => {
+            api.generateFromDescriptionStream(
+              projectId,
+              {
+                onProgress: (data) => {
+                  devLog(`[初始化项目] 从描述生成进度: ${data.step}, 共 ${data.total} 页`);
+                },
+                onDone: () => resolve(),
+                onError: (message) => reject(new Error(message)),
+              },
+              content,
+            ).catch(reject);
+          }),
+          '从描述生成大纲和页面描述',
+        );
       }
 
       // 5. 获取完整项目信息
@@ -689,19 +704,29 @@ const debouncedUpdatePage = debounce(
     }
   },
 
-  // 从描述生成大纲和页面描述（同步操作）
+  // 从描述生成大纲和页面描述（流式操作，避免超时）
   generateFromDescription: async () => {
     const { currentProject } = get();
     if (!currentProject) return;
 
     set({ isGlobalLoading: true, error: null });
     try {
-      const response = await api.generateFromDescription(currentProject.id!);
-      devLog('[从描述生成] API响应:', response);
-      
+      await new Promise<void>((resolve, reject) => {
+        api.generateFromDescriptionStream(
+          currentProject.id!,
+          {
+            onProgress: (data) => {
+              devLog('[从描述生成] 进度:', data.step, '共', data.total, '页');
+            },
+            onDone: () => resolve(),
+            onError: (message) => reject(new Error(message)),
+          },
+        ).catch(reject);
+      });
+
       // 刷新项目数据，确保获取最新的大纲和描述
       await get().syncProject();
-      
+
       // 再次确认数据已更新
       const { currentProject: updatedProject } = get();
       devLog('[从描述生成] 刷新后的项目:', updatedProject?.pages.length, '个页面');

@@ -13,7 +13,7 @@ const mockCreateProject = vi.fn()
 const mockGetProject = vi.fn()
 const mockAssociateFileToProject = vi.fn()
 const mockUploadTemplate = vi.fn()
-const mockGenerateFromDescription = vi.fn()
+const mockGenerateFromDescriptionStream = vi.fn()
 
 vi.mock('@/api/endpoints', () => ({
   createProject: (...args: any[]) => {
@@ -32,9 +32,9 @@ vi.mock('@/api/endpoints', () => ({
     callOrder.push('uploadTemplate')
     return mockUploadTemplate(...args)
   },
-  generateFromDescription: (...args: any[]) => {
-    callOrder.push('generateFromDescription')
-    return mockGenerateFromDescription(...args)
+  generateFromDescriptionStream: (...args: any[]) => {
+    callOrder.push('generateFromDescriptionStream')
+    return mockGenerateFromDescriptionStream(...args)
   },
   // Other mocks needed by the store
   updatePage: vi.fn(),
@@ -75,7 +75,13 @@ describe('initializeProject - reference file association', () => {
       data: { file: { id: 'file-1', project_id: 'proj-001' } }
     })
     mockUploadTemplate.mockResolvedValue({ data: {} })
-    mockGenerateFromDescription.mockResolvedValue({ data: {} })
+    // Simulate stream calling onDone immediately
+    mockGenerateFromDescriptionStream.mockImplementation(
+      (_projectId: string, callbacks: any) => {
+        callbacks.onDone({ total: 0, pages: [] })
+        return Promise.resolve()
+      }
+    )
 
     // Reset store
     const { result } = renderHook(() => useProjectStore())
@@ -120,7 +126,7 @@ describe('initializeProject - reference file association', () => {
     // Verify call order: create → associate → generate
     const createIdx = callOrder.indexOf('createProject')
     const associateIdx = callOrder.indexOf('associateFileToProject')
-    const generateIdx = callOrder.indexOf('generateFromDescription')
+    const generateIdx = callOrder.indexOf('generateFromDescriptionStream')
 
     expect(createIdx).toBeLessThan(associateIdx)
     expect(associateIdx).toBeLessThan(generateIdx)
