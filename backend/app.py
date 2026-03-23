@@ -126,6 +126,11 @@ def create_app():
         # Load settings from database and sync to app.config
         _load_settings_to_config(app)
 
+        # Clean up stale tasks/pages from a previous server crash or restart.
+        # Any task still marked PROCESSING cannot be resumed, so we fail them
+        # and reset the corresponding pages so users can retry generation.
+        _cleanup_stale_tasks(app)
+
         # Warn early if the Google API key looks invalid (wrong length / placeholder)
         if app.config.get('AI_PROVIDER_FORMAT', 'gemini') == 'gemini':
             validate_google_api_key(app.config.get('GOOGLE_API_KEY', ''))
@@ -200,6 +205,51 @@ def create_app():
         }
     
     return app
+
+
+def _cleanup_stale_tasks(app):
+    """Mark tasks that were PROCESSING when the server last shut down as FAILED.
+
+    These tasks will never complete because the background threads no longer
+    exist.  Pages held in GENERATING / QUEUED / FAILED states are reset to
+    DESCRIPTION_GENERATED so users can retry image generation immediately.
+    """
+    from models import db, Task, Page, Project
+
+    try:
+        stale_tasks = Task.query.filter_by(status='PROCESSING').all()
+        if not stale_tasks:
+            return
+
+        for task in stale_tasks:
+            task.status = 'FAILED'
+            task.error_message = '服务重启导致任务中断，请重新生成图片'
+
+        # Reset all pages whose generation was interrupted
+        affected = (
+            Page.query.filter(Page.status.in_(['GENERATING', 'QUEUED', 'FAILED']))
+            .update({'status': 'DESCRIPTION_GENERATED'}, synchronize_session=False)
+        )
+
+        # Reset projects that are stuck in GENERATING_IMAGES with no completed pages
+        completed_project_ids = (
+            db.session.query(Page.project_id)
+            .filter(Page.status == 'COMPLETED')
+            .distinct()
+        )
+        Project.query.filter(
+            Project.status == 'GENERATING_IMAGES',
+            ~Project.id.in_(completed_project_ids)
+        ).update({'status': 'DESCRIPTIONS_GENERATED'}, synchronize_session=False)
+
+        db.session.commit()
+        logging.info(
+            f"Startup cleanup: failed {len(stale_tasks)} stale task(s), "
+            f"reset {affected} interrupted page(s)"
+        )
+    except Exception as e:
+        db.session.rollback()
+        logging.warning(f"Startup cleanup failed (non-fatal): {e}")
 
 
 def _load_settings_to_config(app):

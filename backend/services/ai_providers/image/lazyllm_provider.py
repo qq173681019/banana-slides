@@ -1,7 +1,13 @@
 """
 Lazyllm framework implementation for image editing and generation
 
-Support models:
+Text-to-image models (used when no reference image is provided):
+- qwen:        wanx2.1-t2i-turbo
+- doubao:       doubao-seedream-3-0-t2i-250415
+- siliconflow:  black-forest-labs/FLUX.1-schnell (or other configured model)
+- glm:          cogview-4-250304
+
+Image editing models (used when reference image(s) are provided):
 - qwen-image-edit
 - qwen-image-edit-plus
 - qwen-image-edit-plus-2025-10-30
@@ -46,6 +52,14 @@ DEFAULT_CONSTRAINTS = {
     'max_dim': None,
     'min_pixels': None,
     'separator': 'x',
+}
+
+# Default text-to-image models per vendor (used when no reference image is provided)
+VENDOR_T2I_DEFAULTS = {
+    'qwen': 'wanx2.1-t2i-turbo',
+    'doubao': 'doubao-seedream-3-0-t2i-250415',
+    'glm': 'cogview-4-250304',
+    # siliconflow uses the same model for both t2i and editing
 }
 
 
@@ -135,12 +149,20 @@ class LazyLLMImageProvider(ImageProvider):
     """Image generation using Lazyllm framework"""
     def __init__(self, source: str = 'doubao', model: str = 'doubao-seedream-4-0-250828'):
         """
-        Initialize GenAI image provider
+        Initialize LazyLLM image provider.
+
+        Two lazyllm clients are created at construction time:
+          - ``editing_client``: ``type='image_editing'``, uses *model* as-is.
+             Called when reference image(s) are provided.
+          - ``t2i_client``: ``type='text2image'``, uses a vendor-specific default
+             model (see VENDOR_T2I_DEFAULTS) so that pure text-to-image generation
+             works even when the configured *model* is editing-only.
+             Called when **no** reference images are provided.
 
         Args:
-            source: image_editing model provider, support qwen,doubao,siliconflow now.
-            model: Model name to use
-            type: Category of the online service. Defaults to ``llm``.
+            source: lazyllm vendor name (qwen, doubao, siliconflow, glm, …)
+            model:  image editing model.  For text-to-image without a reference
+                    image the vendor default from VENDOR_T2I_DEFAULTS is used.
         """
         try:
             import lazyllm
@@ -152,10 +174,26 @@ class LazyLLMImageProvider(ImageProvider):
 
         ensure_lazyllm_namespace_key(source, namespace='BANANA')
         self._source = source
+
+        # Image-editing client: used when reference image(s) are available
         self.client = lazyllm.namespace('BANANA').OnlineModule(
             source=source,
             model=model,
             type='image_editing',
+        )
+
+        # Text-to-image client: used when no reference image is provided.
+        # Use the vendor's dedicated t2i model when available, otherwise fall
+        # back to the same model (some providers share models across both modes).
+        t2i_model = VENDOR_T2I_DEFAULTS.get(source, model)
+        self.t2i_client = lazyllm.namespace('BANANA').OnlineModule(
+            source=source,
+            model=t2i_model,
+            type='text2image',
+        )
+        logger.debug(
+            f"[LazyLLM] Initialized provider: source={source}, "
+            f"editing_model={model}, t2i_model={t2i_model}"
         )
 
     def generate_image(self, prompt: str = None,
@@ -190,7 +228,25 @@ class LazyLLMImageProvider(ImageProvider):
                 temp_paths.append(temp_path)
         try:
             try:
-                response_path = self.client(prompt, lazyllm_files=file_paths, size=size_str)
+                if file_paths:
+                    # Reference image(s) available → use image-editing client
+                    try:
+                        response_path = self.client(prompt, lazyllm_files=file_paths, size=size_str)
+                    except Exception as edit_err:
+                        # On network/SSL errors, fall back to text-to-image to ensure generation completes
+                        err_lower = str(edit_err).lower()
+                        if any(k in err_lower for k in ('ssl', 'ssleof', 'max retries', 'connectionpool', 'connection', 'timeout')):
+                            logger.warning(
+                                f"[LazyLLM] Image editing client failed with network error, "
+                                f"falling back to text-to-image: {edit_err}"
+                            )
+                            response_path = self.t2i_client(prompt, size=size_str)
+                        else:
+                            raise
+                else:
+                    # No reference images → use text-to-image client
+                    logger.info("[LazyLLM] No reference images provided, using text-to-image client")
+                    response_path = self.t2i_client(prompt, size=size_str)
             except Exception as client_err:
                 # LazyLLM may fail internally when the image URL returns application/octet-stream
                 # instead of image/*. In that case, extract the URL and download manually.
@@ -222,17 +278,37 @@ class LazyLLMImageProvider(ImageProvider):
                         return result
                 raise
 
+            logger.debug(f"[LazyLLM] raw response_path type={type(response_path)}, value={str(response_path)[:200]}")
             image_path = decode_query_with_filepaths(response_path) # dict
+            logger.debug(f"[LazyLLM] decoded image_path type={type(image_path)}, value={str(image_path)[:200]}")
+
+            # decode_query_with_filepaths may return empty for text2image responses
+            # that are plain file paths or URLs — fall back to using response_path directly
             if not image_path:
-                logger.warning('No images found in response')
-                raise ValueError()
+                logger.warning(f'[LazyLLM] decode_query_with_filepaths returned empty, trying response_path directly: {str(response_path)[:200]}')
+                image_path = response_path
+
             if isinstance(image_path, dict):
                 files = image_path.get('files')
                 if files and isinstance(files, list) and len(files) > 0:
                     image_path = files[0]
                 else:
-                    logger.warning('No valid image path in response')
+                    logger.warning('No valid image path in response dict')
                     return None
+
+            if not image_path:
+                logger.warning('No images found in response')
+                raise ValueError('No image path returned from provider')
+
+            # If it's a URL, download it directly
+            if isinstance(image_path, str) and image_path.startswith('http'):
+                logger.info(f"[LazyLLM] Downloading image from URL: {image_path[:100]}...")
+                resp = requests.get(image_path, timeout=60)
+                resp.raise_for_status()
+                result = Image.open(BytesIO(resp.content)).copy()
+                logger.info(f'[LazyLLM] Downloaded image from URL, size: {result.size[0]}x{result.size[1]}')
+                return result
+
             try:
                 with Image.open(image_path) as image:
                     result = image.copy()
