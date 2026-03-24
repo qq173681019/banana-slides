@@ -13,7 +13,7 @@ const detailI18n = {
     detail: {
       title: "编辑页面描述", pageCount: "共 {{count}} 页", generateImages: "生成图片",
       generating: "生成中...", page: "第 {{num}} 页", titleLabel: "标题",
-      description: "描述", batchGenerate: "批量生成描述", export: "导出描述", exportFull: "导出大纲和描述", import: "导入", importExport: "导入/导出",
+      description: "描述", batchGenerate: "批量生成描述", export: "导出描述", exportFull: "导出大纲和描述", exportPptxText: "导出文字版 PPT", import: "导入", importExport: "导入/导出",
       pagesCompleted: "页已完成", noPages: "还没有页面",
       noPagesHint: "请先返回大纲编辑页添加页面", backToOutline: "返回大纲编辑",
       aiPlaceholder: "例如：让描述更详细、删除第2页的某个要点、强调XXX的重要性... · Ctrl+Enter提交",
@@ -43,7 +43,7 @@ const detailI18n = {
     detail: {
       title: "Edit Descriptions", pageCount: "{{count}} pages", generateImages: "Generate Images",
       generating: "Generating...", page: "Page {{num}}", titleLabel: "Title",
-      description: "Description", batchGenerate: "Batch Generate Descriptions", export: "Export Descriptions", exportFull: "Export Outline & Descriptions", import: "Import", importExport: "Import/Export",
+      description: "Description", batchGenerate: "Batch Generate Descriptions", export: "Export Descriptions", exportFull: "Export Outline & Descriptions", exportPptxText: "Export Text PPT", import: "Import", importExport: "Import/Export",
       pagesCompleted: "pages completed", noPages: "No pages yet",
       noPagesHint: "Please go back to outline editor to add pages first", backToOutline: "Back to Outline Editor",
       aiPlaceholder: "e.g., Make descriptions more detailed, remove a point from page 2, emphasize XXX... · Ctrl+Enter to submit",
@@ -73,8 +73,9 @@ const detailI18n = {
 import { Button, Loading, useToast, useConfirm, AiRefineInput, FilePreviewModal, ReferenceFileList } from '@/components/shared';
 import { DescriptionCard } from '@/components/preview/DescriptionCard';
 import { useProjectStore } from '@/store/useProjectStore';
-import { refineDescriptions, getTaskStatus, addPage, updateProject } from '@/api/endpoints';
+import { refineDescriptions, getTaskStatus, addPage, updateProject, exportTextPPTX } from '@/api/endpoints';
 import { exportProjectToMarkdown, parseMarkdownPages } from '@/utils/projectUtils';
+import { downloadFile } from '@/utils';
 
 /** 详细程度图标：用线条数量表示精简/标准/详细 */
 const DETAIL_LEVEL_LINES: Record<string, number[]> = {
@@ -364,6 +365,28 @@ export const DetailEditor: React.FC = () => {
     show({ message: t('detail.messages.exportSuccess'), type: 'success' });
   }, [currentProject, show, t]);
 
+  // 导出文字版 PPTX
+  const [isExportingTextPptx, setIsExportingTextPptx] = useState(false);
+  const handleExportTextPptx = useCallback(async () => {
+    if (!currentProject || !projectId) return;
+    setIsExportingTextPptx(true);
+    try {
+      const res = await exportTextPPTX(projectId);
+      const url = res.data?.download_url_absolute || res.data?.download_url;
+      if (url) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentProject.title || 'presentation'}_text.pptx`;
+        a.click();
+        show({ message: t('detail.messages.exportSuccess'), type: 'success' });
+      }
+    } catch (err: any) {
+      show({ message: err?.response?.data?.error?.message || err?.message || '导出失败', type: 'error' });
+    } finally {
+      setIsExportingTextPptx(false);
+    }
+  }, [currentProject, projectId, show, t]);
+
   // 导入描述 Markdown 文件（追加新页面）
   const handleImportDescriptions = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -555,6 +578,15 @@ export const DetailEditor: React.FC = () => {
                   >
                     <Download size={14} />
                     {t('detail.exportFull')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { handleExportTextPptx(); setFileMenuOpen(false); }}
+                    disabled={isExportingTextPptx || !currentProject.pages.some(p => p.description_content || p.outline_content)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-600 dark:text-foreground-tertiary hover:bg-gray-50 dark:hover:bg-background-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150"
+                  >
+                    <Download size={14} />
+                    {isExportingTextPptx ? '导出中...' : t('detail.exportPptxText')}
                   </button>
                   <div className="border-t border-gray-100 dark:border-border-primary" />
                   <button

@@ -255,7 +255,183 @@ class ExportService:
             prs.save(pptx_bytes)
             pptx_bytes.seek(0)
             return pptx_bytes.getvalue()
-    
+
+    @staticmethod
+    def _parse_description_text(text: str) -> dict:
+        """Parse a page description text into title and body lines."""
+        title = ''
+        body_lines = []
+        if not text:
+            return {'title': title, 'body': body_lines}
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith('页面标题：') or stripped.startswith('页面标题:'):
+                title = stripped.split('：', 1)[-1].split(':', 1)[-1].strip()
+            elif stripped.startswith('副标题：') or stripped.startswith('副标题:'):
+                subtitle = stripped.split('：', 1)[-1].split(':', 1)[-1].strip()
+                if subtitle:
+                    body_lines.insert(0, subtitle)
+            elif stripped.startswith('页面文字：') or stripped.startswith('页面文字:'):
+                continue  # section header, skip
+            elif stripped.startswith('图片素材') or stripped.startswith('排版：') or stripped.startswith('风格：') or stripped.startswith('背景：'):
+                continue  # visual hints, skip
+            elif stripped.startswith('!['):
+                continue  # markdown images, skip
+            elif stripped.startswith('其他页面素材'):
+                break  # stop at visual section
+            else:
+                body_lines.append(stripped)
+        return {'title': title, 'body': body_lines}
+
+    @staticmethod
+    def create_pptx_from_descriptions(pages: list, output_file: str = None, aspect_ratio: str = '16:9') -> Optional[bytes]:
+        """
+        Create a text-based PPTX from page description/outline content.
+        No generated images needed — useful for exporting before image generation.
+
+        Args:
+            pages: List of Page model objects with description_content / outline_content
+            output_file: Optional output path; if None, returns bytes
+            aspect_ratio: Slide aspect ratio string, e.g. '16:9'
+        Returns:
+            PPTX bytes if output_file is None, otherwise None
+        """
+        from pptx.util import Pt, Emu
+        from pptx.dml.color import RGBColor
+        from pptx.enum.text import PP_ALIGN
+
+        prs = Presentation()
+
+        try:
+            core = prs.core_properties
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            core.author = "banana-slides"
+            core.last_modified_by = "banana-slides"
+            core.created = now
+            core.modified = now
+        except Exception:
+            pass
+
+        page_w, page_h = _get_page_size_inches(aspect_ratio)
+        prs.slide_width = Inches(page_w)
+        prs.slide_height = Inches(page_h)
+
+        # Theme colours
+        BG_COLOR = RGBColor(0x1A, 0x1A, 0x2E)      # dark navy
+        TITLE_COLOR = RGBColor(0xFF, 0xD7, 0x00)    # golden yellow
+        BODY_COLOR = RGBColor(0xE0, 0xE0, 0xE0)     # light grey
+        ACCENT_COLOR = RGBColor(0xFF, 0xD7, 0x00)   # same as title
+
+        blank_layout = prs.slide_layouts[6]  # blank
+
+        for page in pages:
+            # Parse text content
+            desc = None
+            if page.description_content:
+                try:
+                    desc_json = json.loads(page.description_content) if isinstance(page.description_content, str) else page.description_content
+                    desc = ExportService._parse_description_text(desc_json.get('text', ''))
+                except Exception:
+                    pass
+
+            outline = None
+            if page.outline_content:
+                try:
+                    outline = json.loads(page.outline_content) if isinstance(page.outline_content, str) else page.outline_content
+                except Exception:
+                    pass
+
+            # Determine title and body
+            title_text = ''
+            body_lines = []
+            if desc:
+                title_text = desc['title']
+                body_lines = desc['body']
+            if not title_text and outline:
+                title_text = outline.get('title', '')
+            if not body_lines and outline:
+                points = outline.get('points', [])
+                body_lines = [p if isinstance(p, str) else str(p) for p in points]
+
+            slide = prs.slides.add_slide(blank_layout)
+
+            # Dark background
+            from pptx.util import Emu as _Emu
+            bg = slide.shapes.add_shape(
+                1,  # MSO_SHAPE_TYPE.RECTANGLE
+                0, 0,
+                prs.slide_width, prs.slide_height
+            )
+            bg.fill.solid()
+            bg.fill.fore_color.rgb = BG_COLOR
+            bg.line.fill.background()
+
+            # Accent bar on left edge
+            bar_w = Inches(0.08)
+            bar = slide.shapes.add_shape(
+                1, 0, 0, bar_w, prs.slide_height
+            )
+            bar.fill.solid()
+            bar.fill.fore_color.rgb = ACCENT_COLOR
+            bar.line.fill.background()
+
+            margin_left = Inches(0.45)
+            margin_top = Inches(0.4)
+            slide_w = prs.slide_width - margin_left - Inches(0.3)
+            title_h = Inches(1.0)
+
+            # Title
+            title_box = slide.shapes.add_textbox(margin_left, margin_top, slide_w, title_h)
+            tf = title_box.text_frame
+            tf.word_wrap = True
+            p = tf.paragraphs[0]
+            p.alignment = PP_ALIGN.LEFT
+            run = p.add_run()
+            run.text = title_text or f'第 {page.order_index + 1} 页'
+            run.font.size = Pt(28)
+            run.font.bold = True
+            run.font.color.rgb = TITLE_COLOR
+
+            # Divider line
+            line_top = margin_top + title_h + Inches(0.05)
+            div = slide.shapes.add_shape(
+                1, margin_left, line_top, slide_w, Inches(0.025)
+            )
+            div.fill.solid()
+            div.fill.fore_color.rgb = ACCENT_COLOR
+            div.line.fill.background()
+
+            # Body content
+            body_top = line_top + Inches(0.18)
+            body_h = prs.slide_height - body_top - Inches(0.3)
+            if body_lines:
+                body_box = slide.shapes.add_textbox(margin_left, body_top, slide_w, body_h)
+                btf = body_box.text_frame
+                btf.word_wrap = True
+                for i, line in enumerate(body_lines):
+                    bp = btf.paragraphs[0] if i == 0 else btf.add_paragraph()
+                    bp.alignment = PP_ALIGN.LEFT
+                    bp.space_before = Pt(2)
+                    is_bullet = line.startswith('- ') or line.startswith('• ')
+                    display = line.lstrip('-• ').strip() if is_bullet else line
+                    brun = bp.add_run()
+                    prefix = '• ' if is_bullet or True else ''  # always bullet
+                    brun.text = f'{prefix}{display}'
+                    brun.font.size = Pt(16)
+                    brun.font.color.rgb = BODY_COLOR
+
+        if output_file:
+            prs.save(output_file)
+            return None
+        else:
+            buf = io.BytesIO()
+            prs.save(buf)
+            buf.seek(0)
+            return buf.getvalue()
+
     @staticmethod
     def create_pdf_from_images(image_paths: List[str], output_file: str = None, aspect_ratio: str = '16:9') -> Optional[bytes]:
         """

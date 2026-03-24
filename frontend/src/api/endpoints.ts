@@ -654,6 +654,20 @@ export const exportImages = async (
 };
 
 /**
+ * 导出文字版 PPTX（无需生成图片，直接从页面描述导出）
+ */
+export const exportTextPPTX = async (
+  projectId: string,
+  pageIds?: string[]
+): Promise<ApiResponse<{ download_url: string; download_url_absolute?: string }>> => {
+  const url = `/api/projects/${projectId}/export/pptx-text${buildPageIdsQuery(pageIds)}`;
+  const response = await apiClient.get<
+    ApiResponse<{ download_url: string; download_url_absolute?: string }>
+  >(url);
+  return response.data;
+};
+
+/**
  * 导出为可编辑PPTX（异步任务）
  * @param projectId 项目ID
  * @param filename 可选的文件名

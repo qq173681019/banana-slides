@@ -242,6 +242,55 @@ def export_images(project_id):
         return error_response('SERVER_ERROR', str(e), 500)
 
 
+@export_bp.route('/<project_id>/export/pptx-text', methods=['GET'])
+def export_pptx_text(project_id):
+    """
+    GET /api/projects/{project_id}/export/pptx-text?filename=...&page_ids=id1,id2,id3
+    Export a text-only PPTX directly from page descriptions, no generated images required.
+    """
+    try:
+        project = Project.query.get(project_id)
+        if not project:
+            return not_found('Project')
+
+        selected_page_ids = parse_page_ids_from_query(request)
+        pages = get_filtered_pages(project_id, selected_page_ids if selected_page_ids else None)
+        if not pages:
+            return bad_request("No pages found for project")
+
+        pages_with_content = [p for p in pages if p.description_content or p.outline_content]
+        if not pages_with_content:
+            return bad_request("No page descriptions found. Please generate descriptions first.")
+
+        file_service = FileService(current_app.config['UPLOAD_FOLDER'])
+        exports_dir = file_service._get_exports_dir(project_id)
+
+        filename = secure_filename(request.args.get('filename', f'presentation_text_{project_id}.pptx'))
+        if not filename.endswith('.pptx'):
+            filename += '.pptx'
+        output_path = os.path.join(exports_dir, filename)
+
+        ExportService.create_pptx_from_descriptions(
+            pages_with_content,
+            output_file=output_path,
+            aspect_ratio=project.image_aspect_ratio or '16:9'
+        )
+
+        download_path = f"/files/{project_id}/exports/{filename}"
+        base_url = request.url_root.rstrip("/")
+
+        return success_response(
+            data={
+                "download_url": download_path,
+                "download_url_absolute": f"{base_url}{download_path}",
+            },
+            message="Text PPTX export completed"
+        )
+    except Exception as e:
+        logger.exception(f"[export_pptx_text] Error: {e}")
+        return error_response('SERVER_ERROR', str(e), 500)
+
+
 @export_bp.route('/<project_id>/export/editable-pptx', methods=['POST'])
 def export_editable_pptx(project_id):
     """
